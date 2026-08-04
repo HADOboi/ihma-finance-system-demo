@@ -1,0 +1,6 @@
+{
+  "name": "IHMA Ledger",
+  "description": "A comprehensive hierarchical finance recording and summary system for the Indian Homeopathic Medical Association.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
