@@ -223,7 +223,7 @@ export default function App() {
     )}`;
     const downloadAnchor = document.createElement("a");
     downloadAnchor.setAttribute("href", jsonString);
-    downloadAnchor.setAttribute("download", `IHMA_Ledger_DB_Backup_${Date.now()}.json`);
+    downloadAnchor.setAttribute("download", `IHMA_FinApp_DB_Backup_${Date.now()}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     document.body.removeChild(downloadAnchor);
@@ -234,7 +234,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center">
         <RefreshCw className="h-8 w-8 text-blue-600 animate-spin" />
-        <p className="mt-4 text-sm font-semibold text-slate-600">Initializing IHMA Ledger database...</p>
+        <p className="mt-4 text-sm font-semibold text-slate-600">Initializing IHMA FinApp database...</p>
       </div>
     );
   }
@@ -261,7 +261,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="font-display font-semibold text-base sm:text-xl text-slate-900 tracking-tight leading-none">
-                IHMA Ledger
+                IHMA FinApp
               </h1>
             </div>
           </div>
@@ -625,7 +625,7 @@ export default function App() {
       <footer className="bg-white border-t border-slate-200/80 py-6 mt-12 text-center text-xs text-slate-400 font-medium">
         <p>© 2026 Indian Homeopathic Medical Association. All rights reserved.</p>
         <p className="mt-1 flex items-center justify-center gap-1 font-mono text-[10px] text-slate-350">
-          <Sparkles className="h-3 w-3" /> IHMA Ledger system designed & deployed for localized secure demonstrations.
+          <Sparkles className="h-3 w-3" /> IHMA FinApp system designed & deployed for localized secure demonstrations.
         </p>
       </footer>
     </div>
