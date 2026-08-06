@@ -10,13 +10,14 @@ import {
   HeadType,
   Transaction,
   Member,
+  MemberQualification,
   Asset,
   BankBalance,
   ChapterMaster,
   ReportTab,
 } from "../types";
 import { CHAPTERS } from "../mockData";
-import { formatDateDMY, formatINR } from "../utils/formatters";
+import { formatDateDMY, formatINR, ensureDoctorPrefix } from "../utils/formatters";
 import {
   ArrowLeft,
   Check,
@@ -42,6 +43,7 @@ import {
   ChevronRight,
   AlertTriangle,
   X,
+  Phone,
 } from "lucide-react";
 
 interface TreasurerEntryProps {
@@ -91,6 +93,8 @@ export default function TreasurerEntry({
   const [selectedLoan, setSelectedLoan] = useState<Transaction | null>(null);
   const [repaymentAmount, setRepaymentAmount] = useState<number>(0);
   const [repaymentRemarks, setRepaymentRemarks] = useState<string>("");
+  const [repaymentMode, setRepaymentMode] = useState<"Cash" | "Bank">("Cash");
+  const [repaymentDate, setRepaymentDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [repaymentStep, setRepaymentStep] = useState<number>(0);
 
   // Wizard Data State
@@ -98,26 +102,53 @@ export default function TreasurerEntry({
   const [memberSearchTerm, setMemberSearchTerm] = useState<string>("");
   const [qualSearchTerm, setQualSearchTerm] = useState<string>("");
 
-  const QUALIFICATION_OPTIONS = [
+  const DEGREE_OPTIONS = [
     "BHMS",
+    "MD (Homeo)",
+    "DHMS",
     "MBBS",
     "BAMS",
-    "MD (Homeo)",
-    "MD (General)",
-    "MS",
     "BDS",
     "BUMS",
     "BNYS",
-    "DHMS",
+    "MD (General)",
+    "MS",
     "PhD",
     "DNB",
     "Fellowship",
-    "LLB",
-    "MCh",
-    "DM",
-    "MPH",
+    "Diploma in Homoeopathy",
+    "MPH (Public Health)",
     "MBA (Hospital Mgmt)",
     "M.Sc",
+    "LLB",
+    "MA",
+    "B.Sc",
+  ];
+
+  const MEDICAL_COUNCIL_OPTIONS = [
+    "Travancore-Cochin Medical Council (TCMC)",
+    "State Council of Homoeopathy, Kerala",
+    "Tamil Nadu Board of Homoeopathy",
+    "Karnataka Board of Homoeopathic System of Medicine",
+    "Maharashtra Council of Homoeopathy",
+    "Delhi Homoeopathic Medical Council",
+    "National Medical Commission (NMC)",
+    "Central Council of Homoeopathy (CCH)",
+    "Other Medical Council",
+  ];
+
+  const INDIAN_STATES = [
+    "Kerala",
+    "Tamil Nadu",
+    "Karnataka",
+    "Maharashtra",
+    "Delhi",
+    "Andhra Pradesh",
+    "Telangana",
+    "West Bengal",
+    "Gujarat",
+    "Uttar Pradesh",
+    "Other State",
   ];
 
   // Populate data when editing an existing transaction
@@ -233,6 +264,7 @@ export default function TreasurerEntry({
         recipientId: null,
         recipientName: "",
         particulars: "",
+        paymentMode: "Cash",
         loanAmount: 0,
         targetReturnDate: todayStr,
         remarks: "",
@@ -247,17 +279,36 @@ export default function TreasurerEntry({
     } else if (type === "member") {
       setFormData({
         memberName: "",
+        gender: null, // NO PREFILL
+        bloodGroup: null, // NO PREFILL
+        dob: "",
         qualifications: [],
+        qualificationsList: [],
         qualification: "",
+        specialization: "",
+        yearsOfPractice: "",
+        clinicAddress: "",
+        residentialAddress: "",
+        associationRole: "",
+        emergencyContact: "",
         chapterId: defaultChapterId,
         chapterName: defaultChapterName,
-        membershipType: "Silver", // Silver, Gold, or Platinum
-        membershipDate: todayStr,
-        membershipStatus: "Active",
+        membershipType: null, // STRICT NO PREFILL - Explicit tap required!
+        membershipDate: todayStr, // Date set as today
+        membershipStatus: null, // STRICT NO PREFILL - Explicit tap required!
         mobileNumber: "",
         whatsappNumber: "",
         email: "",
         clinicNumber: "",
+        // Form builder state for adding individual qualification records
+        tempDegree: "",
+        tempDegreeTitle: "",
+        tempInstitution: "",
+        tempUniversity: "",
+        tempYearOfPassing: "",
+        tempMedicalCouncilName: "",
+        tempMedicalCouncilState: "",
+        tempRegistrationNumber: "",
       });
       setQualSearchTerm("");
     } else if (type === "asset") {
@@ -269,7 +320,7 @@ export default function TreasurerEntry({
         purchaseDate: todayStr,
         assetValue: 0,
         assetLife: 5,
-        custodianName: currentUser.name,
+        custodianName: "", // NO PREFILL
       });
     } else if (type === "bank_balance") {
       setFormData({
@@ -299,9 +350,7 @@ export default function TreasurerEntry({
       const isOthers = formData.category === "others";
 
       const steps = [
-        { id: "date", title: "Select Receipt Date", sub: "Default is today; select any date up to today." },
-        { id: "collected_by", title: "Who collected this income?", sub: "Search doctor name or choose guest/non-registered option." },
-        { id: "paid_by", title: "Who paid this amount?", sub: "Search IHMA member doctor (stores Member ID) or select guest." },
+        { id: "date", title: "Select Receipt Date", sub: "Select receipt date." },
         { id: "category", title: "Select Income Head", sub: "Choose the income category for this receipt." },
       ];
 
@@ -318,9 +367,11 @@ export default function TreasurerEntry({
       }
 
       steps.push(
-        { id: "amount", title: "Offered & Paid Amount", sub: "Select preset amounts or enter custom amounts." },
         { id: "payment_mode", title: "Select Mode of Payment", sub: "Choose cash drawer or bank transaction." },
+        { id: "amount", title: "Offered & Paid Amount", sub: "Select preset amounts or enter custom amounts." },
         { id: "remarks", title: "Enter Remarks / Notes", sub: "Optional additional notes for this receipt." },
+        { id: "collected_by", title: "Who collected this income?", sub: "Search doctor name or choose guest/non-registered option." },
+        { id: "paid_by", title: "Who paid this amount?", sub: "Search IHMA member doctor (stores Member ID) or select guest." },
         { id: "review", title: "Review & Save Receipt Entry", sub: "Verify all receipt details and auto-fetched chapter ID before saving." }
       );
       return steps;
@@ -333,9 +384,7 @@ export default function TreasurerEntry({
       const isOthers = formData.category === "others";
 
       const steps = [
-        { id: "date", title: "Select Payment Date", sub: "Default is today; select any date up to today." },
-        { id: "paid_by", title: "Who paid this expense?", sub: "Search doctor, treasurer, or enter payer name." },
-        { id: "paid_to", title: "Who was this paid to?", sub: "Search payee doctor, vendor, or enter custom party name." },
+        { id: "date", title: "Select Payment Date", sub: "Select payment date." },
         { id: "category", title: "Select Expense Head", sub: "Choose the matching expense account head." },
       ];
 
@@ -357,9 +406,11 @@ export default function TreasurerEntry({
       }
 
       steps.push(
-        { id: "amount", title: "Payable & Paid Amount", sub: "Specify full payable sum and actual paid amount." },
         { id: "payment_mode", title: "Select Mode of Payment", sub: "Choose cash drawer or bank transaction." },
+        { id: "amount", title: "Payable & Paid Amount", sub: "Specify full payable sum and actual paid amount." },
         { id: "remarks", title: "Enter Remarks / Notes", sub: "Optional additional notes for this expense." },
+        { id: "paid_by", title: "Who paid this expense?", sub: "Search doctor, treasurer, or enter payer name." },
+        { id: "paid_to", title: "Who was this paid to?", sub: "Search payee doctor, vendor, or enter custom party name." },
         { id: "review", title: "Review & Save Expense Entry", sub: "Verify all voucher details and auto-fetched chapter ID before saving." }
       );
       return steps;
@@ -367,22 +418,25 @@ export default function TreasurerEntry({
 
     if (activeWizard === "loan") {
       return [
-        { id: "date", title: "Select Loan Date", sub: "Default is today; select loan disbursement date." },
+        { id: "date", title: "Select Loan Date", sub: "Select loan disbursement date." },
         { id: "paid_to", title: "Paid To Chapter", sub: "Search & select chapter entity (loans are given only to chapters)." },
         { id: "particulars", title: "Loan Particulars", sub: "Enter loan details or event advance purpose." },
+        { id: "payment_mode", title: "Mode of Payment", sub: "Select payment mode for loan disbursement (Cash or Bank)." },
         { id: "amount", title: "Loan Amount", sub: "Specify principal sum disbursed." },
-        { id: "loan_return_date", title: "Agreed Return Date", sub: "Set expected repayment deadline date." },
         { id: "remarks", title: "Remarks / Notes", sub: "Optional notes for this loan voucher." },
+        { id: "loan_return_date", title: "Agreed Return Date", sub: "Set expected repayment deadline date." },
         { id: "review", title: "Review & Register Loan", sub: "Audit loan parameters before confirming." },
       ];
     }
 
     if (activeWizard === "member") {
       return [
-        { id: "member_info", title: "Doctor Name & Qualifications", sub: "Enter doctor name and select medical/professional qualifications." },
-        { id: "tier_status", title: "Membership Tier & Start Date", sub: "Select tier (Silver, Gold, Platinum) and membership start date." },
-        { id: "contact_info", title: "Contact & Clinic Information", sub: "Enter mobile, WhatsApp, email, and office/clinic phone numbers." },
-        { id: "review", title: "Confirm Member Profile", sub: "Review doctor profile details before saving to directory." },
+        { id: "member_basic", title: "Doctor's Name & Demographics", sub: "Doctor name, gender, blood group & date of birth." },
+        { id: "member_qualifications", title: "Academic Degrees & Qualifications", sub: "Add degrees, university, institution & passing year." },
+        { id: "member_council", title: "Medical Council & Registration", sub: "Council state, council name & registration number." },
+        { id: "member_practice", title: "Clinical Specialty & Address", sub: "Clinical practice specialty, clinic & home address." },
+        { id: "member_contact", title: "Contact Information", sub: "Mobile number, WhatsApp, email, and clinic contact numbers." },
+        { id: "review", title: "Review & Register Doctor Profile", sub: "Audit and verify doctor profile before saving to directory." },
       ];
     }
 
@@ -460,14 +514,16 @@ export default function TreasurerEntry({
     }
     if (sId === "amount_details") return formData.loanAmount > 0 && !!formData.targetReturnDate;
 
-    if (sId === "member_info") {
-      const quals = Array.isArray(formData.qualifications)
-        ? formData.qualifications
-        : formData.qualification ? [formData.qualification] : [];
-      return !!formData.memberName?.trim() && quals.length > 0;
+    if (sId === "member_basic") return !!formData.memberName?.trim();
+    if (sId === "member_qualifications") {
+      const hasList = Array.isArray(formData.qualificationsList) && formData.qualificationsList.length > 0;
+      const hasQuals = Array.isArray(formData.qualifications) && formData.qualifications.length > 0;
+      const hasQualStr = !!formData.qualification?.trim();
+      return hasList || hasQuals || hasQualStr;
     }
-    if (sId === "tier_status") return !!formData.membershipType && !!formData.membershipDate;
-    if (sId === "contact_info") return !!formData.mobileNumber?.trim();
+    if (sId === "member_council") return true;
+    if (sId === "member_practice") return true;
+    if (sId === "member_contact") return !!formData.mobileNumber?.trim();
 
     if (sId === "asset_info") return !!formData.category && !!formData.assetName?.trim();
     if (sId === "value_custodian") return formData.assetValue > 0 && !!formData.custodianName?.trim();
@@ -581,6 +637,7 @@ export default function TreasurerEntry({
         paidToId: formData.recipientId,
         paidToName: formData.recipientName,
         particulars: formData.particulars || "Temporary loan disbursement",
+        paymentMode: (formData.paymentMode || "Cash") as "Cash" | "Bank",
         amountReturned: 0,
         loanBalance: Number(formData.loanAmount),
         loanReturnDate: formData.targetReturnDate,
@@ -594,22 +651,46 @@ export default function TreasurerEntry({
         onAddTransaction(payload);
       }
     } else if (activeWizard === "member" && onAddMember) {
-      const quals = Array.isArray(formData.qualifications)
-        ? formData.qualifications
-        : formData.qualification ? [formData.qualification] : [];
+      const qualList: MemberQualification[] = formData.qualificationsList || [];
+      let qualSummary = "";
+      if (qualList.length > 0) {
+        qualSummary = qualList
+          .map(
+            (q) =>
+              `${q.degree}${q.degreeTitle ? ` in ${q.degreeTitle}` : ""}${
+                q.university ? ` (${q.university})` : q.institution ? ` (${q.institution})` : ""
+              }${q.yearOfPassing ? ` '${q.yearOfPassing.slice(-2)}` : ""}`
+          )
+          .join(" | ");
+      } else if (Array.isArray(formData.qualifications) && formData.qualifications.length > 0) {
+        qualSummary = formData.qualifications.join(", ");
+      } else {
+        qualSummary = formData.qualification || "BHMS";
+      }
+
       onAddMember({
         memberId: `MEM-${Math.floor(100 + Math.random() * 900)}`,
-        memberName: formData.memberName,
-        chapterIdInput: formData.chapterId,
-        chapterNameInput: formData.chapterName,
-        qualification: quals.join(", "),
+        memberName: ensureDoctorPrefix(formData.memberName || "Unnamed"),
+        chapterIdInput: formData.chapterId || defaultChapterId,
+        chapterNameInput: formData.chapterName || defaultChapterName,
+        qualification: qualSummary,
+        qualificationsList: qualList,
         membershipType: formData.membershipType || "Silver",
         membershipDate: formData.membershipDate || todayStr,
         membershipStatus: formData.membershipStatus || "Active",
-        mobileNumber: formData.mobileNumber,
-        whatsappNumber: formData.whatsappNumber || formData.mobileNumber,
+        mobileNumber: formData.mobileNumber || "",
+        whatsappNumber: formData.whatsappNumber || formData.mobileNumber || "",
         email: formData.email || "",
         clinicNumber: formData.clinicNumber || "",
+        gender: formData.gender || undefined,
+        dob: formData.dob || undefined,
+        bloodGroup: formData.bloodGroup || undefined,
+        specialization: formData.specialization || undefined,
+        yearsOfPractice: formData.yearsOfPractice || undefined,
+        clinicAddress: formData.clinicAddress || undefined,
+        residentialAddress: formData.residentialAddress || undefined,
+        associationRole: formData.associationRole || undefined,
+        emergencyContact: formData.emergencyContact || undefined,
       });
     } else if (activeWizard === "asset" && onAddAsset) {
       onAddAsset({
@@ -1044,7 +1125,10 @@ export default function TreasurerEntry({
                         <div className="pt-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
                           <div className="text-slate-500 text-[11px] space-y-0.5">
                             <p>
-                              <strong className="text-slate-700">Loan Date:</strong> {loan.date ? formatDateDMY(loan.date) : "—"} • <strong className="text-slate-700">Voucher #:</strong> {loan.voucherNumber || "LV-N/A"}
+                              <strong className="text-slate-700">Loan Date:</strong> {loan.date ? formatDateDMY(loan.date) : "—"} • <strong className="text-slate-700">Voucher #:</strong> {loan.voucherNumber || "LV-N/A"} • <strong className="text-slate-700">Out Mode:</strong> {loan.paymentMode || "Cash"}
+                              {returnedAmt > 0 && (
+                                <> • <strong className="text-emerald-700">Repay Mode:</strong> {loan.repaymentPaymentMode || loan.paymentMode || "Cash"}</>
+                              )}
                             </p>
                             {isSettled && loan.loanReturnedDate && (
                               <p className="text-emerald-800 font-semibold flex items-center gap-1">
@@ -1070,6 +1154,8 @@ export default function TreasurerEntry({
                                   setSelectedLoan(loan);
                                   setRepaymentAmount(0);
                                   setRepaymentRemarks("");
+                                  setRepaymentMode("Cash");
+                                  setRepaymentDate(new Date().toISOString().slice(0, 10));
                                   setRepaymentStep(0);
                                   setActiveWizard("repay_loan");
                                 }}
@@ -1235,6 +1321,51 @@ export default function TreasurerEntry({
                     className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                    Mode of Repayment Received <span className="text-rose-600">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setRepaymentMode("Cash")}
+                      className={`py-2.5 px-4 text-xs font-bold rounded-xl border flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                        repaymentMode === "Cash"
+                          ? "bg-emerald-700 border-emerald-700 text-white shadow-xs"
+                          : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="text-base">💵</span>
+                      <span>Cash</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRepaymentMode("Bank")}
+                      className={`py-2.5 px-4 text-xs font-bold rounded-xl border flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                        repaymentMode === "Bank"
+                          ? "bg-emerald-700 border-emerald-700 text-white shadow-xs"
+                          : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="text-base">🏦</span>
+                      <span>Bank Transfer / Cheque</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Repayment Date Received <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    value={repaymentDate}
+                    onChange={(e) => setRepaymentDate(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
               </div>
             )}
 
@@ -1267,6 +1398,20 @@ export default function TreasurerEntry({
                     <span className="font-bold text-teal-800 text-sm">
                       {formatINR((selectedLoan.amountReturned || 0) + repaymentAmount)}
                     </span>
+                  </div>
+
+                  {/* Mode of Repayment */}
+                  <div className="flex justify-between py-1.5 border-b border-slate-200">
+                    <span className="text-slate-500 font-semibold">Mode of Repayment:</span>
+                    <span className="font-bold text-emerald-800">
+                      {repaymentMode === "Cash" ? "💵 Cash" : "🏦 Bank Transfer / Cheque"}
+                    </span>
+                  </div>
+
+                  {/* Repayment Date */}
+                  <div className="flex justify-between py-1.5 border-b border-slate-200">
+                    <span className="text-slate-500 font-semibold">Repayment Date Received:</span>
+                    <span className="font-bold text-slate-900">{formatDateDMY(repaymentDate)}</span>
                   </div>
 
                   {/* 5. Loan Balance */}
@@ -1367,17 +1512,19 @@ export default function TreasurerEntry({
                   const prevReturned = selectedLoan.amountReturned || 0;
                   const newReturned = prevReturned + repaymentAmount;
                   const newBal = Math.max(0, selectedLoan.amount - newReturned);
-                  const returnedDate = newBal <= 0 ? todayStr : selectedLoan.loanReturnedDate;
+                  const returnedDate = newBal <= 0 ? repaymentDate : selectedLoan.loanReturnedDate;
 
                   const updatedLoan: Transaction = {
                     ...selectedLoan,
                     amountReturned: newReturned,
                     loanBalance: newBal,
+                    repaymentPaymentMode: repaymentMode,
+                    repaymentDate: repaymentDate,
                     loanReturnedDate: returnedDate,
                     updatedAt: new Date().toISOString(),
                     remarks: repaymentRemarks
-                      ? `${selectedLoan.remarks ? selectedLoan.remarks + " | " : ""}${repaymentRemarks}`
-                      : selectedLoan.remarks,
+                      ? `${selectedLoan.remarks ? selectedLoan.remarks + " | " : ""}Repaid ₹${repaymentAmount} via ${repaymentMode} on ${formatDateDMY(repaymentDate)}: ${repaymentRemarks}`
+                      : `${selectedLoan.remarks ? selectedLoan.remarks + " | " : ""}Repaid ₹${repaymentAmount} via ${repaymentMode} on ${formatDateDMY(repaymentDate)}`,
                   };
 
                   onUpdateTransaction(updatedLoan);
@@ -1489,7 +1636,7 @@ export default function TreasurerEntry({
                     {currentStepConfig.id === "date" && (
                       <div className="space-y-4">
                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                          Select Receipt Date (Max: Today)
+                          Select Receipt Date
                         </label>
                         <div className="flex items-center gap-3">
                           <input
@@ -1507,9 +1654,6 @@ export default function TreasurerEntry({
                             Set Today
                           </button>
                         </div>
-                        <p className="text-xs text-slate-500">
-                          Default is today ({new Date().toISOString().slice(0, 10)}). You can select any date up to today for backdated receipts.
-                        </p>
                       </div>
                     )}
 
@@ -2091,7 +2235,7 @@ export default function TreasurerEntry({
                     {currentStepConfig.id === "date" && (
                       <div className="space-y-4">
                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                          Select Payment Date (Max: Today)
+                          Select Payment Date
                         </label>
                         <div className="flex items-center gap-3">
                           <input
@@ -2109,9 +2253,6 @@ export default function TreasurerEntry({
                             Set Today
                           </button>
                         </div>
-                        <p className="text-xs text-slate-500">
-                          Default is today ({new Date().toISOString().slice(0, 10)}). Select any date up to today.
-                        </p>
                       </div>
                     )}
 
@@ -2449,7 +2590,7 @@ export default function TreasurerEntry({
                                 onClick={() =>
                                   setFormData({ ...formData, payableAmount: v })
                                 }
-                                className="px-3 py-1 bg-amber-100 text-amber-900 text-xs font-bold rounded-full hover:bg-amber-200 cursor-pointer"
+                                className="px-3 py-1 bg-teal-100 text-teal-800 text-xs font-bold rounded-full hover:bg-teal-200 cursor-pointer"
                               >
                                 ₹{v.toLocaleString()}
                               </button>
@@ -2457,18 +2598,18 @@ export default function TreasurerEntry({
                           </div>
                         </div>
 
-                        <div className="bg-rose-50/50 p-4 rounded-xl border border-rose-200">
-                          <label className="block text-xs font-bold text-rose-900 uppercase tracking-wider mb-1">
+                        <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200">
+                          <label className="block text-xs font-bold text-emerald-900 uppercase tracking-wider mb-1">
                             Amount Actually Paid
                           </label>
                           <div className="flex items-center gap-2">
-                            <span className="text-lg font-bold text-rose-700">₹</span>
+                            <span className="text-lg font-bold text-emerald-700">₹</span>
                             <input
                               type="number"
                               min="0"
                               value={formData.paidAmount || ""}
                               onChange={(e) => setFormData({ ...formData, paidAmount: Number(e.target.value) })}
-                              className="w-full text-2xl font-bold font-display text-rose-950 bg-transparent focus:outline-hidden"
+                              className="w-full text-2xl font-bold font-display text-emerald-950 bg-transparent focus:outline-hidden"
                               placeholder="0"
                             />
                           </div>
@@ -2481,7 +2622,7 @@ export default function TreasurerEntry({
                                 onClick={() =>
                                   setFormData({ ...formData, paidAmount: v })
                                 }
-                                className="px-3 py-1 bg-rose-100 text-rose-900 text-xs font-bold rounded-full hover:bg-rose-200 cursor-pointer"
+                                className="px-3 py-1 bg-emerald-100 text-emerald-900 text-xs font-bold rounded-full hover:bg-emerald-200 cursor-pointer"
                               >
                                 ₹{v.toLocaleString()}
                               </button>
@@ -2489,8 +2630,8 @@ export default function TreasurerEntry({
                           </div>
 
                           {formData.payableAmount > formData.paidAmount && formData.paidAmount > 0 && (
-                            <div className="mt-2 text-xs text-rose-800 font-semibold bg-rose-100 p-2 rounded-lg flex items-center gap-1.5">
-                              <AlertTriangle className="h-4 w-4 shrink-0" />
+                            <div className="mt-2 text-xs text-emerald-800 font-semibold bg-emerald-100 p-2 rounded-lg flex items-center gap-1.5">
+                              <AlertTriangle className="h-4 w-4 shrink-0 text-emerald-700" />
                               <span>
                                 Outstanding balance of {formatINR(formData.payableAmount - formData.paidAmount)} will be tracked as pending payable.
                               </span>
@@ -2720,6 +2861,36 @@ export default function TreasurerEntry({
                       </div>
                     )}
 
+                    {/* Mode of Payment */}
+                    {currentStepConfig.id === "payment_mode" && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Select Mode of Payment *
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          {[
+                            { mode: "Cash", icon: "💵", label: "Cash", sub: "Hand physical cash" },
+                            { mode: "Bank", icon: "🏦", label: "Bank Transfer", sub: "NEFT / RTGS / Cheque" },
+                          ].map((item) => (
+                            <button
+                              key={item.mode}
+                              type="button"
+                              onClick={() => setFormData({ ...formData, paymentMode: item.mode })}
+                              className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                                formData.paymentMode === item.mode
+                                  ? "border-indigo-600 bg-indigo-50/80 ring-2 ring-indigo-500/20"
+                                  : "border-slate-200 hover:border-indigo-300 bg-white"
+                              }`}
+                            >
+                              <div className="text-2xl mb-1">{item.icon}</div>
+                              <div className="font-bold text-xs text-slate-900">{item.label}</div>
+                              <div className="text-[10px] text-slate-500">{item.sub}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Amount */}
                     {currentStepConfig.id === "amount" && (
                       <div className="space-y-4">
@@ -2813,6 +2984,10 @@ export default function TreasurerEntry({
                             <span className="font-semibold text-slate-800">{formData.particulars}</span>
                           </div>
                           <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Payment Mode:</span>
+                            <span className="font-bold text-slate-900">{formData.paymentMode || "Cash"}</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
                             <span className="text-slate-500 font-semibold">Loan Amount:</span>
                             <span className="font-bold text-indigo-900 text-sm">{formatINR(formData.loanAmount)}</span>
                           </div>
@@ -2844,223 +3019,430 @@ export default function TreasurerEntry({
                 {/* ---------------- MEMBER WIZARD STEPS ---------------- */}
                 {activeWizard === "member" && (
                   <>
-                    {/* Step 1: Member Name & Qualifications */}
-                    {currentStepConfig.id === "member_info" && (
-                      <div className="space-y-4">
+                    {/* Step 1: Doctor Name & Demographics */}
+                    {currentStepConfig.id === "member_basic" && (
+                      <div className="space-y-5">
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">
-                            Doctor / Member Name *
+                          <label className="block text-xs font-bold text-slate-800 mb-1.5 uppercase tracking-wider">
+                            Full Name of Doctor / Member *
                           </label>
                           <input
                             type="text"
                             placeholder="e.g. Dr. Suresh Nair"
                             value={formData.memberName || ""}
                             onChange={(e) => setFormData({ ...formData, memberName: e.target.value })}
-                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-medium"
+                            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-semibold text-slate-900 shadow-2xs"
                           />
                         </div>
 
+                        {/* Gender Selection */}
                         <div>
-                          <div className="flex justify-between items-center mb-1.5">
-                            <label className="block text-xs font-bold text-slate-700">
-                              Member Qualification(s) *
-                            </label>
-                            <span className="text-[10px] text-slate-500">Searchable & Multi-Select</span>
-                          </div>
-
-                          {/* Selected Qualifications Badges */}
-                          <div className="min-h-[42px] p-2 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap gap-1.5 items-center mb-2">
-                            {(!formData.qualifications || formData.qualifications.length === 0) ? (
-                              <span className="text-xs text-slate-400 italic px-1">No qualifications selected yet (select from list below)</span>
-                            ) : (
-                              formData.qualifications.map((q: string) => (
-                                <span
-                                  key={q}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-teal-700 text-white text-xs font-semibold rounded-lg shadow-2xs animate-fadeIn"
-                                >
-                                  <span>{q}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const next = formData.qualifications.filter((item: string) => item !== q);
-                                      setFormData({ ...formData, qualifications: next });
-                                    }}
-                                    className="hover:bg-teal-800 rounded-full p-0.5"
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </button>
-                                </span>
-                              ))
-                            )}
-                          </div>
-
-                          {/* Qualification Search Input */}
-                          <div className="relative mb-2">
-                            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                            <input
-                              type="text"
-                              placeholder="Search or type custom qualification (e.g., BHMS, MBBS, LLB)..."
-                              value={qualSearchTerm}
-                              onChange={(e) => setQualSearchTerm(e.target.value)}
-                              className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                            />
-                          </div>
-
-                          {/* Filtered Option Pills */}
-                          <div className="max-h-40 overflow-y-auto p-2 border border-slate-200 rounded-xl bg-white flex flex-wrap gap-1.5">
-                            {QUALIFICATION_OPTIONS.filter((opt) =>
-                              opt.toLowerCase().includes(qualSearchTerm.toLowerCase())
-                            ).map((opt) => {
-                              const isSelected = (formData.qualifications || []).includes(opt);
-                              return (
-                                <button
-                                  key={opt}
-                                  type="button"
-                                  onClick={() => {
-                                    const current = formData.qualifications || [];
-                                    const next = isSelected
-                                      ? current.filter((i: string) => i !== opt)
-                                      : [...current, opt];
-                                    setFormData({ ...formData, qualifications: next });
-                                  }}
-                                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                                    isSelected
-                                      ? "bg-teal-600 text-white border-teal-600 shadow-2xs"
-                                      : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                                  }`}
-                                >
-                                  {isSelected ? `✓ ${opt}` : `+ ${opt}`}
-                                </button>
-                              );
-                            })}
-
-                            {/* Custom Add Option if search term doesn't match standard list exactly */}
-                            {qualSearchTerm.trim() !== "" &&
-                              !QUALIFICATION_OPTIONS.some((opt) => opt.toLowerCase() === qualSearchTerm.trim().toLowerCase()) &&
-                              !(formData.qualifications || []).includes(qualSearchTerm.trim()) && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const custom = qualSearchTerm.trim();
-                                    const current = formData.qualifications || [];
-                                    setFormData({ ...formData, qualifications: [...current, custom] });
-                                    setQualSearchTerm("");
-                                  }}
-                                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200"
-                                >
-                                  + Add Custom "{qualSearchTerm.trim()}"
-                                </button>
-                              )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Step 2: Membership Type & Date */}
-                    {currentStepConfig.id === "tier_status" && (
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-2">
-                            Membership Type / Tier *
+                          <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
+                            Gender
                           </label>
                           <div className="grid grid-cols-3 gap-2.5">
                             {[
-                              { key: "Silver", label: "Silver", desc: "1 Year Tier", color: "border-slate-300 bg-slate-50" },
-                              { key: "Gold", label: "Gold", desc: "12 Years Tier", color: "border-amber-300 bg-amber-50/50" },
-                              { key: "Platinum", label: "Platinum", desc: "Lifelong / Lifetime", color: "border-teal-300 bg-teal-50/50" },
-                            ].map((tier) => (
+                              { key: "Male", label: "👨 Male" },
+                              { key: "Female", label: "👩 Female" },
+                              { key: "Other", label: "👤 Other" },
+                            ].map((g) => (
                               <button
-                                key={tier.key}
+                                key={g.key}
                                 type="button"
-                                onClick={() => setFormData({ ...formData, membershipType: tier.key })}
-                                className={`p-3 rounded-xl border-2 text-left transition-all flex flex-col justify-between ${
-                                  formData.membershipType === tier.key
-                                    ? "border-teal-600 bg-teal-50/90 ring-2 ring-teal-500/20"
-                                    : "border-slate-200 hover:border-slate-300 bg-white"
+                                onClick={() => setFormData({ ...formData, gender: g.key })}
+                                className={`py-3 px-3 rounded-xl border-2 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                                  formData.gender === g.key
+                                    ? "bg-teal-700 text-white border-teal-700 shadow-xs"
+                                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
                                 }`}
                               >
-                                <div>
-                                  <span className="font-bold text-xs text-slate-900 block">{tier.label}</span>
-                                  <span className="text-[10px] text-slate-500 block mt-0.5">{tier.desc}</span>
-                                </div>
-                                <div
-                                  className={`w-4 h-4 rounded-full border mt-2 flex items-center justify-center text-[10px] ${
-                                    formData.membershipType === tier.key
-                                      ? "border-teal-600 bg-teal-600 text-white font-bold"
-                                      : "border-slate-300 bg-white"
-                                  }`}
-                                >
-                                  {formData.membershipType === tier.key && "✓"}
-                                </div>
+                                {g.label}
                               </button>
                             ))}
                           </div>
                         </div>
 
+                        {/* Blood Group Selection */}
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">
-                            Membership Start Date *
+                          <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
+                            Blood Group
+                          </label>
+                          <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                            {["O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-"].map((bg) => (
+                              <button
+                                key={bg}
+                                type="button"
+                                onClick={() => setFormData({ ...formData, bloodGroup: bg })}
+                                className={`py-2 px-2 rounded-lg border font-bold text-xs transition-all cursor-pointer ${
+                                  formData.bloodGroup === bg
+                                    ? "bg-rose-700 text-white border-rose-700 shadow-2xs"
+                                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                                }`}
+                              >
+                                {bg}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Date of Birth */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                            Date of Birth
                           </label>
                           <input
                             type="date"
-                            value={formData.membershipDate || new Date().toISOString().slice(0, 10)}
-                            onChange={(e) => setFormData({ ...formData, membershipDate: e.target.value })}
-                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-semibold focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                            value={formData.dob || ""}
+                            onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                            className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-medium"
                           />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">
-                            Membership Status
-                          </label>
-                          <div className="grid grid-cols-3 gap-2">
-                            {["Active", "Hold", "Expired"].map((st) => (
-                              <button
-                                key={st}
-                                type="button"
-                                onClick={() => setFormData({ ...formData, membershipStatus: st })}
-                                className={`py-2 px-3 rounded-lg border text-xs font-bold ${
-                                  formData.membershipStatus === st
-                                    ? "bg-slate-800 text-white border-slate-800"
-                                    : "bg-white border-slate-200 text-slate-700"
-                                }`}
-                              >
-                                {st}
-                              </button>
-                            ))}
-                          </div>
                         </div>
                       </div>
                     )}
 
-                    {/* Step 3: Contact Information */}
-                    {currentStepConfig.id === "contact_info" && (
-                      <div className="space-y-3">
+                    {/* Step 2: Academic Qualifications Builder */}
+                    {currentStepConfig.id === "member_qualifications" && (
+                      <div className="space-y-5">
+                        {/* Qualification Add Form FIRST */}
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
+                            <span>+ Add New Qualification Entry</span>
+                            <span className="text-[11px] font-normal text-slate-500 font-sans">Fill details & click Add</span>
+                          </h4>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                Degree / Qualification *
+                              </label>
+                              <select
+                                value={formData.tempDegree || ""}
+                                onChange={(e) => setFormData({ ...formData, tempDegree: e.target.value })}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white font-semibold text-slate-800"
+                              >
+                                <option value="">-- Select Degree / Qualification --</option>
+                                {DEGREE_OPTIONS.map((d) => (
+                                  <option key={d} value={d}>
+                                    {d}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                Specialization / Field of Study
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Homoeopathic Materia Medica"
+                                value={formData.tempDegreeTitle || ""}
+                                onChange={(e) => setFormData({ ...formData, tempDegreeTitle: e.target.value })}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                College / Institution Name
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Govt. Homoeopathic Medical College"
+                                value={formData.tempInstitution || ""}
+                                onChange={(e) => setFormData({ ...formData, tempInstitution: e.target.value })}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                University Name
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. KUHS / MG University"
+                                value={formData.tempUniversity || ""}
+                                onChange={(e) => setFormData({ ...formData, tempUniversity: e.target.value })}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                Year of Passing
+                              </label>
+                              <input
+                                type="number"
+                                placeholder="e.g. 1998"
+                                value={formData.tempYearOfPassing || ""}
+                                onChange={(e) => setFormData({ ...formData, tempYearOfPassing: e.target.value })}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white font-mono"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                Council Reg # (Optional)
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. TCMC/HOM/1234"
+                                value={formData.tempRegistrationNumber || ""}
+                                onChange={(e) => setFormData({ ...formData, tempRegistrationNumber: e.target.value })}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white font-mono"
+                              />
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!formData.tempDegree) return;
+                              const newQual: MemberQualification = {
+                                degree: formData.tempDegree,
+                                degreeTitle: formData.tempDegreeTitle?.trim() || undefined,
+                                institution: formData.tempInstitution?.trim() || undefined,
+                                university: formData.tempUniversity?.trim() || undefined,
+                                yearOfPassing: formData.tempYearOfPassing?.trim() || undefined,
+                                registrationNumber: formData.tempRegistrationNumber?.trim() || undefined,
+                              };
+                              const currentList = formData.qualificationsList || [];
+                              setFormData({
+                                ...formData,
+                                qualificationsList: [...currentList, newQual],
+                                tempDegree: "",
+                                tempDegreeTitle: "",
+                                tempInstitution: "",
+                                tempUniversity: "",
+                                tempYearOfPassing: "",
+                                tempRegistrationNumber: "",
+                              });
+                            }}
+                            className="w-full py-2.5 bg-teal-800 text-white font-bold text-xs rounded-lg shadow-2xs hover:bg-teal-900 transition-colors cursor-pointer flex items-center justify-center gap-2 mt-2"
+                          >
+                            <Plus className="h-4 w-4" />
+                            <span>Add This Qualification to Profile</span>
+                          </button>
+                        </div>
+
+                        {/* Added Qualifications List DOWN BELOW */}
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">
-                            Mobile Number *
+                          <label className="block text-xs font-bold text-slate-800 mb-2 uppercase tracking-wider flex items-center justify-between">
+                            <span>Qualifications Added So Far ({(formData.qualificationsList || []).length})</span>
+                          </label>
+
+                          {(!formData.qualificationsList || formData.qualificationsList.length === 0) ? (
+                            <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-center">
+                              <p className="text-xs text-slate-500 font-medium">No qualification entries added yet.</p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">Fill out the form above and tap "+ Add Qualification To Profile".</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {formData.qualificationsList.map((q: any, idx: number) => (
+                                <div
+                                  key={idx}
+                                  className="p-3 bg-white border border-teal-200 rounded-xl shadow-2xs flex items-start justify-between gap-3"
+                                >
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="bg-teal-700 text-white text-xs font-bold px-2 py-0.5 rounded-md">
+                                        {q.degree}
+                                      </span>
+                                      {q.degreeTitle && (
+                                        <span className="text-xs font-bold text-slate-800">in {q.degreeTitle}</span>
+                                      )}
+                                      {q.yearOfPassing && (
+                                        <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono font-semibold">
+                                          Passed: {q.yearOfPassing}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {(q.institution || q.university) && (
+                                      <p className="text-xs text-slate-600 font-medium">
+                                        {[q.institution, q.university].filter(Boolean).join(" • ")}
+                                      </p>
+                                    )}
+
+                                    {q.registrationNumber && (
+                                      <p className="text-[11px] text-teal-800 font-mono">
+                                        Reg #: {q.registrationNumber}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const nextList = formData.qualificationsList.filter((_: any, i: number) => i !== idx);
+                                      setFormData({ ...formData, qualificationsList: nextList });
+                                    }}
+                                    className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors"
+                                    title="Remove Qualification"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step 3: Medical Council & Registration */}
+                    {currentStepConfig.id === "member_council" && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                            Medical Council Name
+                          </label>
+                          <select
+                            value={formData.tempMedicalCouncilName || ""}
+                            onChange={(e) => setFormData({ ...formData, tempMedicalCouncilName: e.target.value })}
+                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-semibold text-slate-900"
+                          >
+                            <option value="">-- Select Medical Council --</option>
+                            {MEDICAL_COUNCIL_OPTIONS.map((mc) => (
+                              <option key={mc} value={mc}>
+                                {mc}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                            Medical Council State
+                          </label>
+                          <select
+                            value={formData.tempMedicalCouncilState || ""}
+                            onChange={(e) => setFormData({ ...formData, tempMedicalCouncilState: e.target.value })}
+                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-semibold text-slate-900"
+                          >
+                            <option value="">-- Select Council State --</option>
+                            {INDIAN_STATES.map((st) => (
+                              <option key={st} value={st}>
+                                {st}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                            Primary Medical Registration Number
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. TCMC/HOM/89420"
+                            value={formData.tempRegistrationNumber || ""}
+                            onChange={(e) => setFormData({ ...formData, tempRegistrationNumber: e.target.value })}
+                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-mono font-bold text-slate-900"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step 4: Clinical Specialty & Address */}
+                    {currentStepConfig.id === "member_practice" && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                            Clinical Specialization / Focus Area
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. General Clinical Homoeopathy, Paediatric Care"
+                            value={formData.specialization || ""}
+                            onChange={(e) => setFormData({ ...formData, specialization: e.target.value })}
+                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-medium text-slate-900"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                            Years of Active Clinical Practice
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 15 Years"
+                            value={formData.yearsOfPractice || ""}
+                            onChange={(e) => setFormData({ ...formData, yearsOfPractice: e.target.value })}
+                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-medium text-slate-900"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                            Clinic / Hospital Address
+                          </label>
+                          <textarea
+                            rows={2}
+                            placeholder="e.g. Suite #204, Doctor's Plaza, MG Road, Cochin"
+                            value={formData.clinicAddress || ""}
+                            onChange={(e) => setFormData({ ...formData, clinicAddress: e.target.value })}
+                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-medium text-slate-900"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                            Residential Address
+                          </label>
+                          <textarea
+                            rows={2}
+                            placeholder="e.g. House #14, Green Valley Enclave, Aluva"
+                            value={formData.residentialAddress || ""}
+                            onChange={(e) => setFormData({ ...formData, residentialAddress: e.target.value })}
+                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-medium text-slate-900"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                            IHMA Association Role / Position
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Life Member / Patron / Chapter Committee"
+                            value={formData.associationRole || ""}
+                            onChange={(e) => setFormData({ ...formData, associationRole: e.target.value })}
+                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-medium text-slate-900"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step 5: Contact Information */}
+                    {currentStepConfig.id === "member_contact" && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-800 mb-1 uppercase tracking-wider">
+                            Mobile Phone Number *
                           </label>
                           <input
                             type="text"
                             placeholder="+91 9876543210"
                             value={formData.mobileNumber || ""}
                             onChange={(e) => setFormData({ ...formData, mobileNumber: e.target.value })}
-                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-medium"
+                            className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-bold text-slate-900"
                           />
                         </div>
 
                         <div>
                           <div className="flex justify-between items-center mb-1">
-                            <label className="block text-xs font-bold text-slate-700">
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                               WhatsApp Number
                             </label>
                             {formData.mobileNumber && (
                               <button
                                 type="button"
                                 onClick={() => setFormData({ ...formData, whatsappNumber: formData.mobileNumber })}
-                                className="text-[10px] text-teal-700 font-bold hover:underline"
+                                className="text-[11px] text-teal-700 font-bold hover:underline cursor-pointer"
                               >
-                                Same as Mobile
+                                Copy Mobile Number
                               </button>
                             )}
                           </div>
@@ -3069,12 +3451,12 @@ export default function TreasurerEntry({
                             placeholder="+91 9876543210"
                             value={formData.whatsappNumber || ""}
                             onChange={(e) => setFormData({ ...formData, whatsappNumber: e.target.value })}
-                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-medium"
+                            className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-bold text-slate-900"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
                             Email Address
                           </label>
                           <input
@@ -3082,12 +3464,12 @@ export default function TreasurerEntry({
                             placeholder="doctor@example.com"
                             value={formData.email || ""}
                             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                            className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-medium"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
                             Office / Clinic Contact Number
                           </label>
                           <input
@@ -3095,61 +3477,152 @@ export default function TreasurerEntry({
                             placeholder="e.g. 0484 2345678"
                             value={formData.clinicNumber || ""}
                             onChange={(e) => setFormData({ ...formData, clinicNumber: e.target.value })}
-                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                            className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-medium"
                           />
                         </div>
                       </div>
                     )}
 
-                    {/* Step 4: Confirm Member Profile */}
+                    {/* Step 6: Final Review & Confirm Doctor Profile */}
                     {currentStepConfig.id === "review" && (
                       <div className="space-y-4">
-                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2.5 text-xs">
-                          <div className="flex justify-between py-1 border-b border-slate-200">
-                            <span className="text-slate-500 font-semibold">Doctor Name:</span>
-                            <span className="font-bold text-slate-900">{formData.memberName}</span>
-                          </div>
-                          <div className="flex justify-between py-1 border-b border-slate-200">
-                            <span className="text-slate-500 font-semibold">Qualifications:</span>
-                            <span className="font-bold text-teal-800">
-                              {Array.isArray(formData.qualifications)
-                                ? formData.qualifications.join(", ")
-                                : formData.qualification || "None"}
-                            </span>
-                          </div>
-                          <div className="flex justify-between py-1 border-b border-slate-200">
-                            <span className="text-slate-500 font-semibold">Membership Type:</span>
-                            <span className="font-bold text-amber-900">{formData.membershipType} ({formData.membershipStatus || "Active"})</span>
-                          </div>
-                          <div className="flex justify-between py-1 border-b border-slate-200">
-                            <span className="text-slate-500 font-semibold">Start Date:</span>
-                            <span className="font-bold text-slate-800">{formData.membershipDate ? formatDateDMY(formData.membershipDate) : "—"}</span>
-                          </div>
-                          <div className="flex justify-between py-1 border-b border-slate-200">
-                            <span className="text-slate-500 font-semibold">Mobile Number:</span>
-                            <span className="font-medium text-slate-900">{formData.mobileNumber}</span>
-                          </div>
-                          <div className="flex justify-between py-1 border-b border-slate-200">
-                            <span className="text-slate-500 font-semibold">WhatsApp Number:</span>
-                            <span className="font-medium text-slate-900">{formData.whatsappNumber || formData.mobileNumber}</span>
-                          </div>
-                          {formData.email && (
-                            <div className="flex justify-between py-1 border-b border-slate-200">
-                              <span className="text-slate-500 font-semibold">Email:</span>
-                              <span className="font-medium text-slate-900">{formData.email}</span>
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3.5 text-xs">
+                          <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider border-b border-slate-200 pb-2 flex items-center justify-between">
+                            <span>Doctor Profile Audit & Verification</span>
+                            <span className="text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded font-mono font-bold">Ready to Register</span>
+                          </h4>
+
+                          {/* 1. Identity & Demographics */}
+                          <div className="space-y-1.5">
+                            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Identity & Demographics</div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-white p-2.5 rounded-lg border border-slate-200">
+                              <div>
+                                <span className="text-slate-500 text-[11px] block">Full Name:</span>
+                                <span className="font-bold text-slate-900 text-sm">{formData.memberName || "Dr. Unnamed"}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 text-[11px] block">Gender:</span>
+                                <span className="font-semibold text-slate-800">{formData.gender || "Not Specified"}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 text-[11px] block">Blood Group:</span>
+                                <span className="font-semibold text-rose-700">{formData.bloodGroup || "Not Specified"}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 text-[11px] block">Date of Birth:</span>
+                                <span className="font-semibold text-slate-800">{formData.dob || "Not Specified"}</span>
+                              </div>
                             </div>
-                          )}
-                          {formData.clinicNumber && (
-                            <div className="flex justify-between py-1">
-                              <span className="text-slate-500 font-semibold">Clinic / Office Phone:</span>
-                              <span className="font-medium text-slate-900">{formData.clinicNumber}</span>
+                          </div>
+
+                          {/* 2. Academic Degrees & Qualifications */}
+                          <div className="space-y-1.5">
+                            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Academic Qualifications</div>
+                            <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1.5">
+                              {formData.qualificationsList && formData.qualificationsList.length > 0 ? (
+                                formData.qualificationsList.map((q: any, i: number) => (
+                                  <div key={i} className="text-xs border-b border-slate-100 last:border-0 pb-1.5 last:pb-0">
+                                    <span className="font-bold text-teal-800">{q.degree}</span>
+                                    {q.degreeTitle && <span className="font-medium text-slate-800"> in {q.degreeTitle}</span>}
+                                    {(q.institution || q.university) && (
+                                      <span className="text-slate-600 block text-[11px]">
+                                        {[q.institution, q.university].filter(Boolean).join(", ")}
+                                        {q.yearOfPassing ? ` (${q.yearOfPassing})` : ""}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))
+                              ) : (
+                                <span className="font-semibold text-teal-800">
+                                  {formData.qualification || "BHMS"}
+                                </span>
+                              )}
                             </div>
-                          )}
+                          </div>
+
+                          {/* 3. Medical Council Details */}
+                          <div className="space-y-1.5">
+                            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Medical Council Registration</div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-white p-2.5 rounded-lg border border-slate-200">
+                              <div>
+                                <span className="text-slate-500 text-[11px] block">Council Name & State:</span>
+                                <span className="font-semibold text-slate-800">
+                                  {formData.tempMedicalCouncilName || "Medical Council"} ({formData.tempMedicalCouncilState || "Kerala"})
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 text-[11px] block">Primary Registration #:</span>
+                                <span className="font-mono font-bold text-teal-900">{formData.tempRegistrationNumber || "Not Provided"}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 4. Clinical Specialty & Practice */}
+                          <div className="space-y-1.5">
+                            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Clinical Practice & Addresses</div>
+                            <div className="space-y-2 bg-white p-2.5 rounded-lg border border-slate-200">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div>
+                                  <span className="text-slate-500 text-[11px] block">Specialization:</span>
+                                  <span className="font-semibold text-slate-800">{formData.specialization || "General Practice"}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 text-[11px] block">Practice Experience:</span>
+                                  <span className="font-semibold text-slate-800">{formData.yearsOfPractice || "Not Specified"}</span>
+                                </div>
+                              </div>
+                              {formData.clinicAddress && (
+                                <div>
+                                  <span className="text-slate-500 text-[11px] block">Clinic / Hospital Address:</span>
+                                  <span className="font-medium text-slate-800">{formData.clinicAddress}</span>
+                                </div>
+                              )}
+                              {formData.residentialAddress && (
+                                <div>
+                                  <span className="text-slate-500 text-[11px] block">Residential Address:</span>
+                                  <span className="font-medium text-slate-800">{formData.residentialAddress}</span>
+                                </div>
+                              )}
+                              {formData.associationRole && (
+                                <div>
+                                  <span className="text-slate-500 text-[11px] block">IHMA Association Role:</span>
+                                  <span className="font-semibold text-amber-900">{formData.associationRole}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 5. Contact Information */}
+                          <div className="space-y-1.5">
+                            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Contact Information</div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-white p-2.5 rounded-lg border border-slate-200">
+                              <div>
+                                <span className="text-slate-500 text-[11px] block">Mobile Phone #:</span>
+                                <span className="font-mono font-bold text-slate-900">{formData.mobileNumber || "Not Provided"}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 text-[11px] block">WhatsApp #:</span>
+                                <span className="font-mono font-semibold text-slate-800">{formData.whatsappNumber || "Same as Mobile"}</span>
+                              </div>
+                              {formData.email && (
+                                <div>
+                                  <span className="text-slate-500 text-[11px] block">Email Address:</span>
+                                  <span className="font-medium text-slate-800">{formData.email}</span>
+                                </div>
+                              )}
+                              {formData.clinicNumber && (
+                                <div>
+                                  <span className="text-slate-500 text-[11px] block">Clinic Landline #:</span>
+                                  <span className="font-mono text-slate-800">{formData.clinicNumber}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
 
                         <div className="bg-teal-50 p-3 rounded-lg border border-teal-200 text-xs text-teal-900 flex items-center gap-2">
                           <CheckCircle2 className="h-4 w-4 shrink-0 text-teal-700" />
-                          <span>Member profile will be registered under chapter {formData.chapterName || defaultChapterName}.</span>
+                          <span>Member profile will be registered under chapter <strong>{formData.chapterName || defaultChapterName}</strong>.</span>
                         </div>
                       </div>
                     )}

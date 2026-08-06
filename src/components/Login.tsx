@@ -44,9 +44,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-slate-900 font-sans">
           IHMA FinApp
         </h2>
-        <p className="mt-2 text-center text-sm text-slate-600 max-w">
-          Indian Homeopathic Medical Association<br />
-          (Financial Portal)
+        <p className="mt-2 text-center text-base font-semibold text-slate-800">
+          Indian Homeopathic Medical Association
+        </p>
+        <p className="text-center text-xs text-slate-500 font-medium mt-0.5">
+          (Finance Portal)
         </p>
       </div>
 

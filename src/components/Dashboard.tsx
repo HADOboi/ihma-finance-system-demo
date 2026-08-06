@@ -46,6 +46,14 @@ import {
   Landmark,
   Users,
   Briefcase,
+  X,
+  ArrowDownRight,
+  ArrowUpRight,
+  FileText,
+  Receipt,
+  BookOpen,
+  BarChart3,
+  MapPin,
 } from "lucide-react";
 
 interface DashboardProps {
@@ -58,10 +66,11 @@ interface DashboardProps {
   members?: Member[];
   onDeleteTransaction: (id: string) => void;
   onEditTransaction: (tx: Transaction) => void;
+  onUpdateTransaction?: (tx: Transaction) => void;
   initialReportTab?: ReportTab;
 }
 
-type PeriodType = "year" | "month" | "day";
+type PeriodType = "year" | "month" | "day" | "custom";
 
 type ReportTab =
   | "payments"
@@ -86,10 +95,11 @@ export default function Dashboard({
   members = PRELOADED_MEMBERS,
   onDeleteTransaction,
   onEditTransaction,
+  onUpdateTransaction,
   initialReportTab,
 }: DashboardProps) {
   // --- Date Range / Period State ---
-  const [periodType, setPeriodType] = useState<PeriodType>("month");
+  const [periodType, setPeriodType] = useState<PeriodType>("year");
   
   // Year Selector
   const [selectedYear, setSelectedYear] = useState<number>(2026);
@@ -97,6 +107,16 @@ export default function Dashboard({
   const [selectedMonth, setSelectedMonth] = useState<number>(5); // Default to June
   // Day Selector (YYYY-MM-DD)
   const [selectedDay, setSelectedDay] = useState<string>("2026-06-01");
+  // Custom Date Range (From Date -> To Date)
+  const [startDate, setStartDate] = useState<string>("2026-04-01");
+  const [endDate, setEndDate] = useState<string>("2026-06-30");
+
+  // Loan Repayment Modal State
+  const [repayModalTx, setRepayModalTx] = useState<Transaction | null>(null);
+  const [repaymentAmount, setRepaymentAmount] = useState<number>(0);
+  const [repaymentMode, setRepaymentMode] = useState<"Cash" | "Bank">("Cash");
+  const [repaymentDate, setRepaymentDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [repaymentRemarks, setRepaymentRemarks] = useState<string>("");
 
   // --- Hierarchical Filter States ---
   const [selectedStates, setSelectedStates] = useState<string[]>(
@@ -135,6 +155,7 @@ export default function Dashboard({
 
   // Report Sheet View Tab
   const [activeReportTab, setActiveReportTab] = useState<ReportTab>(initialReportTab || "payments");
+  const [isReportDropdownOpen, setIsReportDropdownOpen] = useState(false);
 
   useEffect(() => {
     if (initialReportTab) {
@@ -239,16 +260,17 @@ export default function Dashboard({
       }
 
       // 2. Date/Period Filter
-      const txDate = new Date(tx.date);
-      const txYear = txDate.getFullYear();
-      const txMonth = txDate.getMonth(); // 0-11
+      if (!tx.date) return false;
+      const dateStr = tx.date.slice(0, 10);
+      const parts = dateStr.split("-");
+      const txYear = parts.length > 0 ? parseInt(parts[0], 10) : 0;
+      const txMonth = parts.length > 1 ? parseInt(parts[1], 10) - 1 : 0;
 
       if (periodType === "year") {
         // Indian Financial Year: April of selectedYear to March of selectedYear + 1
-        const start = new Date(`${selectedYear}-04-01`);
-        const end = new Date(`${selectedYear + 1}-03-31`);
-        const current = new Date(tx.date);
-        if (current < start || current > end) {
+        const startStr = `${selectedYear}-04-01`;
+        const endStr = `${selectedYear + 1}-03-31`;
+        if (dateStr < startStr || dateStr > endStr) {
           return false;
         }
       } else if (periodType === "month") {
@@ -258,9 +280,12 @@ export default function Dashboard({
         }
       } else if (periodType === "day") {
         // Specific Day YYYY-MM-DD
-        if (tx.date !== selectedDay) {
+        if (dateStr !== selectedDay) {
           return false;
         }
+      } else if (periodType === "custom") {
+        if (startDate && dateStr < startDate) return false;
+        if (endDate && dateStr > endDate) return false;
       }
 
       // 3. Optional Search Text (remarks or voucher)
@@ -276,25 +301,104 @@ export default function Dashboard({
 
       return true;
     });
-  }, [transactions, selectedChapters, periodType, selectedYear, selectedMonth, selectedDay, searchTerm]);
+  }, [transactions, selectedChapters, periodType, selectedYear, selectedMonth, selectedDay, startDate, endDate, searchTerm]);
 
-  // --- Metrics Computations ---
-  const { totalIncome, totalExpense, netBalance } = useMemo(() => {
-    let inc = 0;
-    let exp = 0;
+  // --- Summary Metrics Computations (Cash vs Bank & Income vs Expense Breakdown) ---
+  const summaryMetrics = useMemo(() => {
+    let actualIncomeCash = 0;
+    let actualIncomeBank = 0;
+    let loanRepaidCash = 0;
+    let loanRepaidBank = 0;
+
+    let actualExpenseCash = 0;
+    let actualExpenseBank = 0;
+    let loansGivenCash = 0;
+    let loansGivenBank = 0;
+
     filteredTransactions.forEach((tx) => {
+      const isCash = tx.paymentMode === "Cash";
+
       if (tx.type === HeadType.Income) {
-        inc += tx.amount;
+        const amt = tx.paidAmount !== undefined ? tx.paidAmount : tx.amount;
+        if (isCash) {
+          actualIncomeCash += amt;
+        } else {
+          actualIncomeBank += amt;
+        }
       } else if (tx.type === HeadType.Expense) {
-        exp += tx.amount;
+        const amt = tx.paidAmount !== undefined ? tx.paidAmount : tx.amount;
+        if (isCash) {
+          actualExpenseCash += amt;
+        } else {
+          actualExpenseBank += amt;
+        }
+      } else if (tx.type === HeadType.Loan) {
+        // Loan given is an outflow/expense
+        if (isCash) {
+          loansGivenCash += tx.amount;
+        } else {
+          loansGivenBank += tx.amount;
+        }
+
+        // Loan repayment received is an inflow/income
+        const returnedAmt = tx.amountReturned || 0;
+        if (returnedAmt > 0) {
+          const isRepaidCash = tx.repaymentPaymentMode ? tx.repaymentPaymentMode === "Cash" : isCash;
+          if (isRepaidCash) {
+            loanRepaidCash += returnedAmt;
+          } else {
+            loanRepaidBank += returnedAmt;
+          }
+        }
       }
     });
+
+    const totalIncomeCash = actualIncomeCash + loanRepaidCash;
+    const totalIncomeBank = actualIncomeBank + loanRepaidBank;
+    const totalIncomeGrand = totalIncomeCash + totalIncomeBank;
+
+    const totalExpenseCash = actualExpenseCash + loansGivenCash;
+    const totalExpenseBank = actualExpenseBank + loansGivenBank;
+    const totalExpenseGrand = totalExpenseCash + totalExpenseBank;
+
+    const netCashBalance = totalIncomeCash - totalExpenseCash;
+    const netBankBalance = totalIncomeBank - totalExpenseBank;
+    const netTotalBalance = totalIncomeGrand - totalExpenseGrand;
+
     return {
-      totalIncome: inc,
-      totalExpense: exp,
-      netBalance: inc - exp,
+      actualIncomeCash,
+      actualIncomeBank,
+      actualIncomeTotal: actualIncomeCash + actualIncomeBank,
+      loanRepaidCash,
+      loanRepaidBank,
+      loanRepaidTotal: loanRepaidCash + loanRepaidBank,
+      totalIncomeCash,
+      totalIncomeBank,
+      totalIncomeGrand,
+
+      actualExpenseCash,
+      actualExpenseBank,
+      actualExpenseTotal: actualExpenseCash + actualExpenseBank,
+      loansGivenCash,
+      loansGivenBank,
+      loansGivenTotal: loansGivenCash + loansGivenBank,
+      totalExpenseCash,
+      totalExpenseBank,
+      totalExpenseGrand,
+
+      netCashBalance,
+      netBankBalance,
+      netTotalBalance,
     };
   }, [filteredTransactions]);
+
+  const { totalIncome, totalExpense, netBalance } = useMemo(() => {
+    return {
+      totalIncome: summaryMetrics.totalIncomeGrand,
+      totalExpense: summaryMetrics.totalExpenseGrand,
+      netBalance: summaryMetrics.netTotalBalance,
+    };
+  }, [summaryMetrics]);
 
   // --- Aggregated Monthly Summary Sheet Logic ---
   // Groups by Head and displays aggregated details including smart compressed Voucher lists!
@@ -412,11 +516,12 @@ export default function Dashboard({
   const monthLabels = ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"];
 
   const yearlyMatrix = useMemo(() => {
-    const headRowMap: Record<string, { headName: string; type: HeadType; monthlyTotals: number[]; grandTotal: number }> = {};
+    const headRowMap: Record<string, { headId: string; headName: string; type: HeadType; monthlyTotals: number[]; grandTotal: number }> = {};
 
     accountHeads.forEach((head) => {
       if (head.isActive) {
         headRowMap[head.id] = {
+          headId: head.id,
           headName: head.name,
           type: head.type,
           monthlyTotals: new Array(12).fill(0),
@@ -425,10 +530,7 @@ export default function Dashboard({
       }
     });
 
-    // We process all transactions for the selected year range regardless of periodType state (as this is a annual matrix report)
-    const start = new Date(`${selectedYear}-04-01`);
-    const end = new Date(`${selectedYear + 1}-03-31`);
-
+    // We process all transactions for the selected year range regardless of periodType state (as this is an annual matrix report)
     transactions.forEach((tx) => {
       // Filter by selected chapters
       if (!selectedChapters.includes(tx.chapterId)) return;
@@ -436,23 +538,30 @@ export default function Dashboard({
       // Exclude loans from standard financial matrix
       if (tx.type === HeadType.Loan) return;
 
-      const txDate = new Date(tx.date);
-      if (txDate >= start && txDate <= end) {
-        if (!headRowMap[tx.headId]) {
-          headRowMap[tx.headId] = {
-            headName: tx.headName,
-            type: tx.type,
+      if (!tx.date) return;
+      const parts = tx.date.slice(0, 10).split("-");
+      if (parts.length < 3) return;
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1; // 0 for Jan, 3 for Apr
+      const fy = m >= 3 ? y : y - 1;
+
+      if (fy === selectedYear) {
+        const headKey = tx.headId || `custom_${tx.type}_${tx.headName || "general"}`;
+        if (!headRowMap[headKey]) {
+          headRowMap[headKey] = {
+            headId: headKey,
+            headName: tx.headName || "General Head",
+            type: tx.type || HeadType.Expense,
             monthlyTotals: new Array(12).fill(0),
             grandTotal: 0,
           };
         }
 
-        const txMonth = txDate.getMonth();
         // find position in Indian financial year array [3, 4, ..., 2]
-        const colIndex = monthsSequence.indexOf(txMonth);
+        const colIndex = monthsSequence.indexOf(m);
         if (colIndex !== -1) {
-          headRowMap[tx.headId].monthlyTotals[colIndex] += tx.amount;
-          headRowMap[tx.headId].grandTotal += tx.amount;
+          headRowMap[headKey].monthlyTotals[colIndex] += (tx.amount || 0);
+          headRowMap[headKey].grandTotal += (tx.amount || 0);
         }
       }
     });
@@ -594,7 +703,7 @@ export default function Dashboard({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `IHMA_FinApp_${activeReportTab}_sheet.csv`);
+    link.setAttribute("download", `IHMA_Ledger_${activeReportTab}_sheet.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -745,42 +854,47 @@ export default function Dashboard({
             )}
           </div>
 
-          {/* B. Date / Period Filters (Full Year, Month, Specific Day) */}
-          <div className="bg-slate-50 p-4 border border-slate-200/70 rounded-2xl flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-              <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1 shrink-0">
+          {/* Date Range Selector Bar */}
+          <div className="bg-[#F8FAFC] p-4 border border-slate-200/80 rounded-2xl space-y-3">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="flex items-center gap-2">
                 <Calendar className="h-4.5 w-4.5 text-blue-600" />
-                Date Range
-              </span>
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Select Period Range</span>
+              </div>
 
-              {/* Range Type Button Group */}
-              <div className="flex bg-white border border-slate-200 rounded-xl p-1 shrink-0">
-                {(["year", "month", "day"] as PeriodType[]).map((type) => (
+              {/* Range Type Buttons */}
+              <div className="flex flex-wrap bg-white border border-slate-200 rounded-xl p-1 gap-1">
+                {(["year", "month", "day", "custom"] as PeriodType[]).map((type) => (
                   <button
                     key={type}
                     onClick={() => setPeriodType(type)}
                     className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors capitalize cursor-pointer ${
                       periodType === type
-                        ? "bg-blue-600 text-white"
-                        : "text-slate-600 hover:text-slate-900"
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                     }`}
                   >
-                    {type === "year" ? "Full Year" : type === "month" ? "Specific Month" : "Single Day"}
+                    {type === "year"
+                      ? "Full Year"
+                      : type === "month"
+                      ? "Specific Month"
+                      : type === "day"
+                      ? "Single Day"
+                      : "Custom Range"}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Dynamic selectors depending on selection above */}
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Year select (applicable to both 'year' and 'month') */}
+            {/* Sub-selectors for chosen PeriodType */}
+            <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-slate-200/50 text-xs">
               {(periodType === "year" || periodType === "month") && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-slate-500 font-medium">Financial Year:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 font-semibold">Financial Year:</span>
                   <select
                     value={selectedYear}
                     onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
-                    className="px-2.5 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white"
+                    className="px-3 py-1.5 border border-slate-300 rounded-xl font-bold text-slate-900 bg-white"
                   >
                     <option value={2026}>2026-27</option>
                     <option value={2025}>2025-26</option>
@@ -789,14 +903,13 @@ export default function Dashboard({
                 </div>
               )}
 
-              {/* Month Selector (applicable to 'month') */}
               {periodType === "month" && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-slate-500 font-medium">Month:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 font-semibold">Month:</span>
                   <select
                     value={selectedMonth}
                     onChange={(e) => setSelectedMonth(parseInt(e.target.value, 10))}
-                    className="px-2.5 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white"
+                    className="px-3 py-1.5 border border-slate-300 rounded-xl font-bold text-slate-900 bg-white"
                   >
                     {[
                       "January", "February", "March", "April", "May", "June",
@@ -810,323 +923,317 @@ export default function Dashboard({
                 </div>
               )}
 
-              {/* Day Calendar Input (applicable to 'day') */}
               {periodType === "day" && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-slate-500 font-medium">Select Day:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 font-semibold">Select Day:</span>
                   <input
                     type="date"
                     value={selectedDay}
                     onChange={(e) => setSelectedDay(e.target.value)}
-                    className="px-2.5 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white"
+                    className="px-3 py-1.5 border border-slate-300 rounded-xl font-bold text-slate-900 bg-white"
                   />
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* 2. METRIC CARDS SUMMARY PANEL */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" id="dashboard-metrics-row">
-        {/* Total Income */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex items-center gap-3 sm:gap-4 hover:border-blue-200 transition-colors">
-          <div className="h-10 w-10 sm:h-12 sm:w-12 bg-blue-50/50 rounded-xl flex items-center justify-center border border-blue-100 shrink-0">
-            <TrendingUp className="h-5.5 w-5.5 sm:h-6 sm:w-6 text-blue-600" />
-          </div>
-          <div>
-            <span className="text-slate-500 text-[10px] sm:text-xs font-semibold uppercase tracking-wider block">Total Income</span>
-            <span className="text-xl sm:text-2xl font-black text-blue-900 block mt-0.5 sm:mt-1">{formatINR(totalIncome)}</span>
-            <span className="text-[9px] sm:text-[10px] text-slate-400 block mt-0.5">Total Income from filtered chapters</span>
-          </div>
-        </div>
-
-        {/* Total Expense */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex items-center gap-3 sm:gap-4 hover:border-rose-200 transition-colors">
-          <div className="h-10 w-10 sm:h-12 sm:w-12 bg-rose-50 rounded-xl flex items-center justify-center border border-rose-100 shrink-0">
-            <TrendingDown className="h-5.5 w-5.5 sm:h-6 sm:w-6 text-rose-700" />
-          </div>
-          <div>
-            <span className="text-slate-500 text-[10px] sm:text-xs font-semibold uppercase tracking-wider block">Total Expense</span>
-            <span className="text-xl sm:text-2xl font-black text-rose-950 block mt-0.5 sm:mt-1">{formatINR(totalExpense)}</span>
-            <span className="text-[9px] sm:text-[10px] text-slate-400 block mt-0.5">Total Expense from filtered chapters</span>
-          </div>
-        </div>
-
-        {/* Net Balance */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex items-center gap-3 sm:gap-4 hover:border-slate-300 transition-colors">
-          <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center border shrink-0 ${
-            netBalance >= 0 ? "bg-blue-50/50 border-blue-100 text-blue-600" : "bg-rose-50 border-rose-100 text-rose-700"
-          }`}>
-            <Scale className="h-5.5 w-5.5 sm:h-6 sm:w-6" />
-          </div>
-          <div>
-            <span className="text-slate-500 text-[10px] sm:text-xs font-semibold uppercase tracking-wider block">Net Balance</span>
-            <span className={`text-xl sm:text-2xl font-black block mt-0.5 sm:mt-1 ${netBalance >= 0 ? "text-blue-900" : "text-rose-900"}`}>
-              {netBalance < 0 ? "-" : ""}{formatINR(Math.abs(netBalance))}
-            </span>
-            <span className="text-[9px] sm:text-[10px] text-slate-400 block mt-0.5">Available chapter balance</span>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. REPORTING SHEETS INTERACTIVE PANEL OR SUMMARY CALLOUT */}
-      {!showDetailedReports ? (
-        <div className="space-y-6">
-          {/* CTA Card to open Detailed Reports */}
-          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-[#0F6E5D] text-white rounded-2xl p-6 shadow-md border border-slate-700/60">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="bg-teal-400/20 text-teal-200 border border-teal-400/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                    Financial Reports
-                  </span>
-                  <span className="text-slate-300 text-xs">Report Sheets</span>
+              {periodType === "custom" && (
+                <div className="flex flex-wrap items-center gap-3 bg-white p-2 rounded-xl border border-slate-200">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500 font-medium">From:</span>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="px-2.5 py-1 border border-slate-300 rounded-lg font-bold text-slate-900 bg-white"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500 font-medium">To:</span>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="px-2.5 py-1 border border-slate-300 rounded-lg font-bold text-slate-900 bg-white"
+                    />
+                  </div>
                 </div>
-                <h3 className="text-xl font-bold font-display text-white mt-2">
-                  Detailed Reports & Statements
-                </h3>
-                <p className="text-slate-200 text-xs mt-1 max-w-2xl leading-relaxed">
-                  Access itemized payments, receipts, loan registry, member directory, assets, and annual summary sheets.
-                </p>
-              </div>
-
-              <button
-                onClick={() => setShowDetailedReports(true)}
-                className="px-5 py-3 bg-[#0F6E5D] hover:bg-[#0B5548] text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2 shrink-0 border border-teal-400/30 hover:scale-[1.02]"
-              >
-                <FileSpreadsheet className="h-4.5 w-4.5" />
-                <span>Open Detailed Reports View</span>
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Quick Jump Shortcut Chips */}
-            <div className="mt-5 pt-4 border-t border-slate-700/80 flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider mr-1">
-                Quick Jump To:
-              </span>
-              <button
-                onClick={() => { setActiveReportTab("payments"); setShowDetailedReports(true); }}
-                className="px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 border border-slate-600 rounded-lg text-xs font-semibold text-slate-100 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-              >
-                <span>💸 Payments</span>
-                <span className="bg-rose-500/30 text-rose-200 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
-                  {filteredPayments.length}
-                </span>
-              </button>
-
-              <button
-                onClick={() => { setActiveReportTab("receipts"); setShowDetailedReports(true); }}
-                className="px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 border border-slate-600 rounded-lg text-xs font-semibold text-slate-100 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-              >
-                <span>🧾 Receipts</span>
-                <span className="bg-teal-500/30 text-teal-200 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
-                  {filteredReceipts.length}
-                </span>
-              </button>
-
-              <button
-                onClick={() => { setActiveReportTab("loans"); setShowDetailedReports(true); }}
-                className="px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 border border-slate-600 rounded-lg text-xs font-semibold text-slate-100 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-              >
-                <span>💼 Loans</span>
-                <span className="bg-indigo-500/30 text-indigo-200 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
-                  {filteredLoans.length}
-                </span>
-              </button>
-
-              <button
-                onClick={() => { setActiveReportTab("members"); setShowDetailedReports(true); }}
-                className="px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 border border-slate-600 rounded-lg text-xs font-semibold text-slate-100 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-              >
-                <span>👥 Members</span>
-                <span className="bg-emerald-500/30 text-emerald-200 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
-                  {filteredMembers.length}
-                </span>
-              </button>
-
-              <button
-                onClick={() => { setActiveReportTab("assets"); setShowDetailedReports(true); }}
-                className="px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 border border-slate-600 rounded-lg text-xs font-semibold text-slate-100 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-              >
-                <span>🏢 Assets</span>
-                <span className="bg-sky-500/30 text-sky-200 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
-                  {filteredAssets.length}
-                </span>
-              </button>
-
-              <button
-                onClick={() => { setActiveReportTab("bank_balances"); setShowDetailedReports(true); }}
-                className="px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 border border-slate-600 rounded-lg text-xs font-semibold text-slate-100 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-              >
-                <span>🏦 Bank / FD</span>
-                <span className="bg-purple-500/30 text-purple-200 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
-                  {filteredBankBalances.length}
-                </span>
-              </button>
-
-              <button
-                onClick={() => { setActiveReportTab("monthly"); setShowDetailedReports(true); }}
-                className="px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 border border-slate-600 rounded-lg text-xs font-semibold text-amber-300 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-              >
-                <span>📊 Monthly Summary</span>
-              </button>
-
-              <button
-                onClick={() => { setActiveReportTab("yearly"); setShowDetailedReports(true); }}
-                className="px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 border border-slate-600 rounded-lg text-xs font-semibold text-amber-300 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-              >
-                <span>📅 Annual Matrix</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Recent Transactions Mini Preview Table */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-              <div>
-                <h3 className="font-bold text-sm text-slate-900 font-display">
-                  Recent Ledger Activity
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Latest recorded transactions across selected chapters
-                </p>
-              </div>
-              <button
-                onClick={() => { setActiveReportTab("raw"); setShowDetailedReports(true); }}
-                className="text-xs font-bold text-[#0F6E5D] hover:text-[#0B5548] flex items-center gap-1 cursor-pointer"
-              >
-                <span>View All {filteredTransactions.length} Entries</span>
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              {filteredTransactions.length === 0 ? (
-                <div className="p-8 text-center text-slate-500 text-xs">
-                  No transactions recorded for the selected filter period.
-                </div>
-              ) : (
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100/60 text-slate-600 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200">
-                      <th className="py-3 px-4">Date</th>
-                      <th className="py-3 px-4">Chapter</th>
-                      <th className="py-3 px-4">Type</th>
-                      <th className="py-3 px-4">Category / Particulars</th>
-                      <th className="py-3 px-4 text-right">Amount (INR)</th>
-                      <th className="py-3 px-4 text-center">Mode</th>
-                      <th className="py-3 px-4 text-center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs text-slate-800">
-                    {filteredTransactions.slice(0, 6).map((tx) => {
-                      const head = accountHeads.find((h) => h.id === tx.headId);
-                      const headName = head ? head.name : tx.headName || "General";
-                      const isInc = tx.type === HeadType.Income;
-                      return (
-                        <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-3 px-4 font-mono text-[11px] text-slate-600">{tx.date ? formatDateDMY(tx.date) : "—"}</td>
-                          <td className="py-3 px-4 font-medium text-slate-900">{tx.chapterNameInput || tx.chapterId}</td>
-                          <td className="py-3 px-4">
-                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                              isInc ? "bg-teal-100 text-teal-800" : "bg-rose-100 text-rose-800"
-                            }`}>
-                              {isInc ? "Receipt" : "Payment"}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="font-semibold">{headName}</div>
-                            <div className="text-[10px] text-slate-500">{tx.paidBy || tx.paidTo || tx.description}</div>
-                          </td>
-                          <td className={`py-3 px-4 text-right font-bold font-mono ${isInc ? "text-teal-800" : "text-rose-800"}`}>
-                            {isInc ? "+" : "-"}₹{tx.amount.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-md font-medium text-slate-600">
-                              {tx.paymentMode || "Cash"}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <button
-                              onClick={() => onEditTransaction(tx)}
-                              className="p-1 text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded-md cursor-pointer transition-all"
-                              title="Edit Entry"
-                            >
-                              <Edit3 className="h-3.5 w-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
               )}
             </div>
           </div>
         </div>
-      ) : (
-        /* Detailed Reports View */
-        <div className="space-y-4">
-          <div className="bg-slate-900 text-white p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-md">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowDetailedReports(false)}
-                className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 cursor-pointer flex items-center gap-1.5 text-xs font-bold transition-all"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span>Back to Overview</span>
-              </button>
-              <div>
-                <h3 className="text-base font-bold font-display text-white">
-                  Detailed Accounting Sheets & Reports
-                </h3>
-                <p className="text-slate-400 text-xs">
-                  Viewing {activeReportTab.toUpperCase()} Sheet • Filtering for {selectedChapters.length} Chapters
-                </p>
-              </div>
-            </div>
+      </div>
 
-            <button
-              onClick={() => setShowDetailedReports(false)}
-              className="text-xs text-slate-400 hover:text-white underline cursor-pointer"
-            >
-              Close Detailed Reports View
-            </button>
-          </div>
+      {/* SECTION 1: SUMMARY */}
+      <div className="space-y-4">
+        <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+          <h2 className="text-xl font-black text-slate-900 font-display tracking-tight">Summary</h2>
+          <span className="text-xs font-semibold text-slate-500">
+            {periodType === "year" && `Financial Year ${selectedYear}-${(selectedYear + 1).toString().slice(2)}`}
+            {periodType === "month" && `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][selectedMonth]} ${selectedYear}`}
+            {periodType === "day" && formatDateDMY(selectedDay)}
+            {periodType === "custom" && `${formatDateDMY(startDate)} to ${formatDateDMY(endDate)}`}
+          </span>
+        </div>
 
+        {/* SUMMARY TABLES GRID */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* 1. RECEIPTS SUMMARY TABLE */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            {/* Sheets Nav & Actions */}
-            <div className="bg-slate-50 px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
-          <div className="flex items-center gap-2.5 w-full lg:max-w-md">
-            <label htmlFor="report-sheet-selector" className="text-slate-500 text-[11px] sm:text-xs font-bold uppercase tracking-wider shrink-0 hidden sm:inline">
-              Report View:
-            </label>
-            <div className="relative w-full">
-              <select
-                id="report-sheet-selector"
-                value={activeReportTab}
-                onChange={(e) => setActiveReportTab(e.target.value as any)}
-                className="w-full pl-3 pr-10 py-2 border border-slate-300 rounded-xl text-xs font-bold bg-white text-slate-800 shadow-xs focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer appearance-none"
-              >
-                <option value="payments">💸 Sheet 1: Payments (Expenses) ({filteredPayments.length} entries)</option>
-                <option value="receipts">🧾 Sheet 2: Receipts (Income) ({filteredReceipts.length} entries)</option>
-                <option value="loans">💼 Sheet 3: Loan Registry ({filteredLoans.length} records)</option>
-                <option value="members">👥 Sheet 4: Member Directory ({filteredMembers.length} members)</option>
-                <option value="entity_types">🏛️ Sheet 5: Entity Types Taxonomy (5 tiers)</option>
-                <option value="assets">🏢 Sheet 6: Asset Register ({filteredAssets.length} assets)</option>
-                <option value="bank_balances">🏦 Sheet 7: FD & Bank Balances ({filteredBankBalances.length} accounts)</option>
-                <option value="chapters">📍 Sheet 8: Chapter Directory / Master ({filteredChapters.length} chapters)</option>
-                <option value="monthly">📊 Monthly Summary Aggregation</option>
-                <option value="yearly">📅 Annual Matrix Sheet (Apr - Mar)</option>
-                <option value="raw">🗂️ Consolidated Raw Ledger ({filteredTransactions.length} total entries)</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500 border-l border-slate-200">
-                <ChevronDown className="h-4 w-4" />
-              </div>
+            <div className="px-4 py-3 bg-emerald-50/80 border-b border-emerald-100 flex items-center justify-between">
+              <h3 className="font-bold text-xs uppercase tracking-wider text-emerald-950 flex items-center gap-1.5">
+                <span>💰</span> Receipts (Income)
+              </h3>
+              <span className="text-[11px] font-bold text-emerald-700 bg-white px-2 py-0.5 rounded-full border border-emerald-200">
+                Total: ₹{summaryMetrics.totalIncomeGrand.toLocaleString()}
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                    <th className="py-2.5 px-4 font-bold text-slate-600">DETAIL</th>
+                    <th className="py-2.5 px-4 text-right font-bold text-slate-600">CASH</th>
+                    <th className="py-2.5 px-4 text-right font-bold text-slate-600">BANK</th>
+                    <th className="py-2.5 px-4 text-right font-bold text-slate-700 bg-slate-100/60">TOTAL</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-800">
+                  <tr className="hover:bg-slate-50/50">
+                    <td className="py-2.5 px-4 font-semibold text-slate-800">Actual Income</td>
+                    <td className="py-2.5 px-4 text-right font-mono">₹{summaryMetrics.actualIncomeCash.toLocaleString()}</td>
+                    <td className="py-2.5 px-4 text-right font-mono">₹{summaryMetrics.actualIncomeBank.toLocaleString()}</td>
+                    <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900 bg-slate-50/60">
+                      ₹{summaryMetrics.actualIncomeTotal.toLocaleString()}
+                    </td>
+                  </tr>
+                  <tr className="hover:bg-slate-50/50">
+                    <td className="py-2.5 px-4 font-semibold text-slate-800">Loan Repayments Received</td>
+                    <td className="py-2.5 px-4 text-right font-mono">
+                      {summaryMetrics.loanRepaidCash > 0 ? `₹${summaryMetrics.loanRepaidCash.toLocaleString()}` : "—"}
+                    </td>
+                    <td className="py-2.5 px-4 text-right font-mono">
+                      {summaryMetrics.loanRepaidBank > 0 ? `₹${summaryMetrics.loanRepaidBank.toLocaleString()}` : "—"}
+                    </td>
+                    <td className="py-2.5 px-4 text-right font-mono font-bold text-emerald-800 bg-slate-50/60">
+                      {summaryMetrics.loanRepaidTotal > 0 ? `₹${summaryMetrics.loanRepaidTotal.toLocaleString()}` : "—"}
+                    </td>
+                  </tr>
+                  <tr className="bg-emerald-50/60 font-black text-emerald-950 border-t-2 border-emerald-200">
+                    <td className="py-3 px-4 uppercase text-[11px] tracking-wider">TOTAL RECEIPTS</td>
+                    <td className="py-3 px-4 text-right font-mono">₹{summaryMetrics.totalIncomeCash.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-right font-mono">₹{summaryMetrics.totalIncomeBank.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-right font-mono text-sm bg-emerald-100/70 text-emerald-950">
+                      ₹{summaryMetrics.totalIncomeGrand.toLocaleString()}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
+
+          {/* 2. PAYMENTS SUMMARY TABLE */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="px-4 py-3 bg-rose-50/80 border-b border-rose-100 flex items-center justify-between">
+              <h3 className="font-bold text-xs uppercase tracking-wider text-rose-950 flex items-center gap-1.5">
+                <span>💸</span> Payments (Expenses)
+              </h3>
+              <span className="text-[11px] font-bold text-rose-700 bg-white px-2 py-0.5 rounded-full border border-rose-200">
+                Total: ₹{summaryMetrics.totalExpenseGrand.toLocaleString()}
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                    <th className="py-2.5 px-4 font-bold text-slate-600">DETAIL</th>
+                    <th className="py-2.5 px-4 text-right font-bold text-slate-600">CASH</th>
+                    <th className="py-2.5 px-4 text-right font-bold text-slate-600">BANK</th>
+                    <th className="py-2.5 px-4 text-right font-bold text-slate-700 bg-slate-100/60">TOTAL</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-800">
+                  <tr className="hover:bg-slate-50/50">
+                    <td className="py-2.5 px-4 font-semibold text-slate-800">Actual Expenses</td>
+                    <td className="py-2.5 px-4 text-right font-mono">₹{summaryMetrics.actualExpenseCash.toLocaleString()}</td>
+                    <td className="py-2.5 px-4 text-right font-mono">₹{summaryMetrics.actualExpenseBank.toLocaleString()}</td>
+                    <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900 bg-slate-50/60">
+                      ₹{summaryMetrics.actualExpenseTotal.toLocaleString()}
+                    </td>
+                  </tr>
+                  <tr className="hover:bg-slate-50/50">
+                    <td className="py-2.5 px-4 font-semibold text-slate-800">Loans Given (Outflow)</td>
+                    <td className="py-2.5 px-4 text-right font-mono">
+                      {summaryMetrics.loansGivenCash > 0 ? `₹${summaryMetrics.loansGivenCash.toLocaleString()}` : "—"}
+                    </td>
+                    <td className="py-2.5 px-4 text-right font-mono">
+                      {summaryMetrics.loansGivenBank > 0 ? `₹${summaryMetrics.loansGivenBank.toLocaleString()}` : "—"}
+                    </td>
+                    <td className="py-2.5 px-4 text-right font-mono font-bold text-rose-800 bg-slate-50/60">
+                      {summaryMetrics.loansGivenTotal > 0 ? `₹${summaryMetrics.loansGivenTotal.toLocaleString()}` : "—"}
+                    </td>
+                  </tr>
+                  <tr className="bg-rose-50/60 font-black text-rose-950 border-t-2 border-rose-200">
+                    <td className="py-3 px-4 uppercase text-[11px] tracking-wider">TOTAL PAYMENTS</td>
+                    <td className="py-3 px-4 text-right font-mono">₹{summaryMetrics.totalExpenseCash.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-right font-mono">₹{summaryMetrics.totalExpenseBank.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-right font-mono text-sm bg-rose-100/70 text-rose-950">
+                      ₹{summaryMetrics.totalExpenseGrand.toLocaleString()}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* CASH & BANK NET BREAKDOWN CARDS */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+          <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs flex justify-between items-center">
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Net Cash Balance</span>
+              <span className={`text-base font-black ${summaryMetrics.netCashBalance >= 0 ? "text-slate-900" : "text-rose-700"}`}>
+                ₹{summaryMetrics.netCashBalance.toLocaleString()}
+              </span>
+            </div>
+            <span className="text-xl">💵</span>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs flex justify-between items-center">
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Net Bank Balance</span>
+              <span className={`text-base font-black ${summaryMetrics.netBankBalance >= 0 ? "text-slate-900" : "text-rose-700"}`}>
+                ₹{summaryMetrics.netBankBalance.toLocaleString()}
+              </span>
+            </div>
+            <span className="text-xl">🏦</span>
+          </div>
+
+          <div className="bg-slate-900 text-white border border-slate-800 rounded-xl p-3.5 shadow-xs flex justify-between items-center">
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Net Surplus / Deficit</span>
+              <span className={`text-base font-black ${summaryMetrics.netTotalBalance >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                {summaryMetrics.netTotalBalance >= 0 ? "+" : ""}₹{summaryMetrics.netTotalBalance.toLocaleString()}
+              </span>
+            </div>
+            <span className="text-xl">⚖️</span>
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION 2: DETAILED REPORTS */}
+      <div className="space-y-4 pt-4 border-t border-slate-200">
+        <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+          <h2 className="text-xl font-black text-slate-900 font-display tracking-tight">Detailed Report</h2>
+        </div>
+
+        {/* ACTIVE SHEET CONTAINER */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs">
+          {/* Sheets Nav & Actions */}
+          <div className="bg-slate-50 px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 rounded-t-2xl relative z-20">
+            <div className="flex items-center gap-2.5 w-full lg:max-w-md">
+              <span className="text-slate-500 text-[11px] sm:text-xs font-bold uppercase tracking-wider shrink-0 hidden sm:inline">
+                Report View:
+              </span>
+
+              {/* CUSTOM STYLED DROPDOWN */}
+              {(() => {
+                const reportTabOptions = [
+                  { id: "payments" as ReportTab, label: "Payments (Expenses)", group: "Financial Registers", icon: ArrowUpRight, count: `${filteredPayments.length} entries` },
+                  { id: "receipts" as ReportTab, label: "Receipts (Income)", group: "Financial Registers", icon: ArrowDownRight, count: `${filteredReceipts.length} entries` },
+                  { id: "loans" as ReportTab, label: "Temporary Loan Registry", group: "Financial Registers", icon: Briefcase, count: `${filteredLoans.length} loans` },
+                  { id: "raw" as ReportTab, label: "Consolidated Raw Ledger", group: "Financial Registers", icon: BookOpen, count: `${filteredTransactions.length} entries` },
+                  
+                  { id: "members" as ReportTab, label: "Member Doctor Directory", group: "Directories & Masters", icon: Users, count: `${filteredMembers.length} doctors` },
+                  { id: "chapters" as ReportTab, label: "Chapter Master Directory", group: "Directories & Masters", icon: MapPin, count: `${chapterDirectory.length} chapters` },
+                  { id: "assets" as ReportTab, label: "Asset Register", group: "Directories & Masters", icon: Building2, count: `${filteredAssets.length} assets` },
+                  { id: "bank_balances" as ReportTab, label: "FD & Bank Accounts", group: "Directories & Masters", icon: Landmark, count: `${filteredBankBalances.length} accounts` },
+                  { id: "entity_types" as ReportTab, label: "Entity Types Taxonomy", group: "Directories & Masters", icon: Layers, count: "5 Tiers" },
+                  
+                  { id: "monthly" as ReportTab, label: "Monthly Summary Aggregation", group: "Analytical Reports", icon: BarChart3, count: "12 Months" },
+                  { id: "yearly" as ReportTab, label: "Annual Matrix Sheet (Apr - Mar)", group: "Analytical Reports", icon: Calendar, count: "FY Matrix" },
+                ];
+
+                const currentOpt = reportTabOptions.find((o) => o.id === activeReportTab) || reportTabOptions[0];
+                const CurrentIcon = currentOpt.icon;
+
+                return (
+                  <div className="relative w-full">
+                    <button
+                      type="button"
+                      id="report-sheet-selector"
+                      onClick={() => setIsReportDropdownOpen(!isReportDropdownOpen)}
+                      className="w-full flex items-center justify-between gap-2 px-3.5 py-2 bg-white border border-slate-300 rounded-xl shadow-2xs hover:border-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-all text-xs font-bold text-slate-800 cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <div className="p-1 rounded-lg bg-blue-50 text-blue-700 shrink-0">
+                          <CurrentIcon className="h-4 w-4" />
+                        </div>
+                        <span className="truncate">{currentOpt.label}</span>
+                        <span className="px-2 py-0.5 text-[10px] font-extrabold bg-slate-100 text-slate-600 rounded-md shrink-0">
+                          {currentOpt.count}
+                        </span>
+                      </div>
+                      <ChevronDown className={`h-4 w-4 text-slate-400 shrink-0 transition-transform ${isReportDropdownOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {isReportDropdownOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setIsReportDropdownOpen(false)}
+                        />
+                        <div className="absolute top-full left-0 mt-2 w-full sm:w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden max-h-96 overflow-y-auto divide-y divide-slate-100">
+                          {["Financial Registers", "Directories & Masters", "Analytical Reports"].map((groupName) => {
+                            const groupOptions = reportTabOptions.filter((o) => o.group === groupName);
+                            if (groupOptions.length === 0) return null;
+
+                            return (
+                              <div key={groupName} className="p-1.5">
+                                <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                  {groupName}
+                                </div>
+                                {groupOptions.map((opt) => {
+                                  const OptIcon = opt.icon;
+                                  const isSelected = activeReportTab === opt.id;
+
+                                  return (
+                                    <button
+                                      key={opt.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveReportTab(opt.id);
+                                        setIsReportDropdownOpen(false);
+                                      }}
+                                      className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                                        isSelected
+                                          ? "bg-blue-50 text-blue-900 font-bold"
+                                          : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2 truncate">
+                                        <OptIcon className={`h-4 w-4 shrink-0 ${isSelected ? "text-blue-600" : "text-slate-400"}`} />
+                                        <span className="truncate">{opt.label}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        <span className={`px-2 py-0.5 text-[10px] rounded-md font-bold ${
+                                          isSelected ? "bg-blue-100 text-blue-800" : "bg-slate-100 text-slate-500"
+                                        }`}>
+                                          {opt.count}
+                                        </span>
+                                        {isSelected && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
 
           <div className="flex items-center gap-3 w-full lg:w-auto">
             {activeReportTab !== "monthly" && activeReportTab !== "yearly" && activeReportTab !== "entity_types" && (
@@ -1158,16 +1265,6 @@ export default function Dashboard({
           {/* SHEET 1: PAYMENTS (EXPENSES) */}
           {activeReportTab === "payments" && (
             <div className="space-y-4">
-              <div className="bg-rose-50/40 p-4 rounded-xl border border-rose-100/30 text-slate-700 text-xs flex gap-3">
-                <Info className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-rose-900">Sheet 1: Payments Register (Expenses)</p>
-                  <p className="mt-0.5 leading-relaxed">
-                    Tracks chapter expenditure items including Sl. No., Chapter ID, Chapter Name, Date, Paid By, Paid To, Accounts Head, Payable Amount, Paid Amount, Balance Amount, Mode of Payment, and Remarks.
-                  </p>
-                </div>
-              </div>
-
               <div className="border border-slate-200 rounded-xl overflow-x-auto">
                 <table className="w-full text-left border-collapse bg-white text-xs" id="payments-sheet-table">
                   <thead>
@@ -1260,16 +1357,6 @@ export default function Dashboard({
           {/* SHEET 2: RECEIPTS (INCOME) */}
           {activeReportTab === "receipts" && (
             <div className="space-y-4">
-              <div className="bg-blue-50/40 p-4 rounded-xl border border-blue-100/30 text-slate-700 text-xs flex gap-3">
-                <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-blue-900">Sheet 2: Receipts Register (Income)</p>
-                  <p className="mt-0.5 leading-relaxed">
-                    Tracks chapter income collections including Sl. No., Chapter ID No., Chapter Name, Date, Collected By, Paid By Name, Accounts Head, Offered Amount, Paid Amount, Balance Amount, Payment Mode, Remarks, and Paid By Member ID.
-                  </p>
-                </div>
-              </div>
-
               <div className="border border-slate-200 rounded-xl overflow-x-auto">
                 <table className="w-full text-left border-collapse bg-white text-xs" id="receipts-sheet-table">
                   <thead>
@@ -1364,16 +1451,6 @@ export default function Dashboard({
           {/* SHEET 3: LOANS REGISTRY */}
           {activeReportTab === "loans" && (
             <div className="space-y-4">
-              <div className="bg-indigo-50/40 p-4 rounded-xl border border-indigo-100/30 text-slate-700 text-xs flex gap-3">
-                <Info className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-indigo-900">Sheet 3: Loans & Disbursements Register</p>
-                  <p className="mt-0.5 leading-relaxed">
-                    Tracks interest-free temporary loans distributed among chapters and members including Sl. No., Chapter ID No., Chapter Name, Date, Paid To, Paid To ID, Recipient Name, Particulars, Amount, Amount Returned, Loan Balance, Return Date, and Remarks.
-                  </p>
-                </div>
-              </div>
-
               <div className="border border-slate-200 rounded-xl overflow-x-auto">
                 <table className="w-full text-left border-collapse bg-white text-xs" id="loans-sheet-table">
                   <thead>
@@ -1386,6 +1463,7 @@ export default function Dashboard({
                       <th className="py-2.5 px-3">Recipient ID</th>
                       <th className="py-2.5 px-3">Recipient Name</th>
                       <th className="py-2.5 px-3">Particulars</th>
+                      <th className="py-2.5 px-3">Mode</th>
                       <th className="py-2.5 px-3 text-right">Loan Amount (₹)</th>
                       <th className="py-2.5 px-3 text-right">Returned (₹)</th>
                       <th className="py-2.5 px-3 text-right">Loan Balance (₹)</th>
@@ -1419,6 +1497,18 @@ export default function Dashboard({
                             <td className="py-3 px-3 font-mono font-bold text-slate-700">{tx.paidToId || "—"}</td>
                             <td className="py-3 px-3 font-semibold text-slate-800">{tx.paidToName || "—"}</td>
                             <td className="py-3 px-3 text-slate-600 max-w-xs truncate" title={tx.particulars || tx.description}>{tx.particulars || tx.description || "—"}</td>
+                            <td className="py-3 px-3">
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-full border border-slate-200 shrink-0 whitespace-nowrap">
+                                  Out: {tx.paymentMode || "Cash"}
+                                </span>
+                                {tx.amountReturned && tx.amountReturned > 0 ? (
+                                  <span className="text-[10px] bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200 shrink-0 whitespace-nowrap">
+                                    In: {tx.repaymentPaymentMode || tx.paymentMode || "Cash"}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </td>
                             <td className="py-3 px-3 text-right font-bold text-slate-900">₹{tx.amount.toLocaleString()}</td>
                             <td className="py-3 px-3 text-right font-medium text-emerald-700">₹{(tx.amountReturned || 0).toLocaleString()}</td>
                             <td className="py-3 px-3 text-right font-black text-indigo-900">₹{bal.toLocaleString()}</td>
@@ -1427,7 +1517,23 @@ export default function Dashboard({
                             {(currentUser.role === "Treasurer" || currentUser.role === "Admin") && (
                               <td className="py-3 px-3 text-center">
                                 {isEditable ? (
-                                  <div className="flex items-center justify-center gap-1">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    {bal > 0 && (
+                                      <button
+                                        onClick={() => {
+                                          setRepayModalTx(tx);
+                                          setRepaymentAmount(bal);
+                                          setRepaymentMode("Cash");
+                                          setRepaymentDate(new Date().toISOString().slice(0, 10));
+                                          setRepaymentRemarks("");
+                                        }}
+                                        className="px-2 py-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg cursor-pointer transition-all flex items-center gap-1 shrink-0"
+                                        title="Log Loan Repayment"
+                                      >
+                                        <ArrowDownRight className="h-3 w-3 text-emerald-600" />
+                                        <span>Repay</span>
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => onEditTransaction(tx)}
                                       className="p-1 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-md cursor-pointer transition-all"
@@ -1465,16 +1571,6 @@ export default function Dashboard({
           {/* SHEET 4: MEMBERS DIRECTORY */}
           {activeReportTab === "members" && (
             <div className="space-y-4">
-              <div className="bg-emerald-50/40 p-4 rounded-xl border border-emerald-100/30 text-slate-700 text-xs flex gap-3">
-                <Info className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-emerald-900">Sheet 4: IHMA Member Directory Register</p>
-                  <p className="mt-0.5 leading-relaxed">
-                    Complete master registry of all registered doctors & medical members across local chapters including Sl. No., Member ID Number, Member Name, Chapter ID No., Chapter Name, Member Qualification, Membership Type, Membership Date, Status, Mobile Number, WhatsApp Number, Email, and Clinic Contact.
-                  </p>
-                </div>
-              </div>
-
               <div className="border border-slate-200 rounded-xl overflow-x-auto">
                 <table className="w-full text-left border-collapse bg-white text-xs" id="members-sheet-table">
                   <thead>
@@ -1533,16 +1629,6 @@ export default function Dashboard({
           {/* SHEET 5: ENTITY TYPES TAXONOMY */}
           {activeReportTab === "entity_types" && (
             <div className="space-y-4">
-              <div className="bg-purple-50/40 p-4 rounded-xl border border-purple-100/30 text-slate-700 text-xs flex gap-3">
-                <Info className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-purple-900">Sheet 5: Entity Types Taxonomy</p>
-                  <p className="mt-0.5 leading-relaxed">
-                    Hierarchical organizational taxonomy governing chapter governance, financial limits, and reporting relationships within IHMA.
-                  </p>
-                </div>
-              </div>
-
               <div className="border border-slate-200 rounded-xl overflow-x-auto">
                 <table className="w-full text-left border-collapse bg-white text-xs" id="entity-types-sheet-table">
                   <thead>
@@ -1597,16 +1683,6 @@ export default function Dashboard({
           {/* SHEET 6: ASSET REGISTER */}
           {activeReportTab === "assets" && (
             <div className="space-y-4">
-              <div className="bg-amber-50/40 p-4 rounded-xl border border-amber-100/30 text-slate-700 text-xs flex gap-3">
-                <Info className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-amber-900">Sheet 6: Asset Register</p>
-                  <p className="mt-0.5 leading-relaxed">
-                    Physical and capital asset tracking registry including Sl. No., Date, Chapter ID No., Chapter Name, Asset Number/ID, Asset Name, Purchase Date, Asset Value (INR), Category, Asset Life (years), and Custodian Name.
-                  </p>
-                </div>
-              </div>
-
               <div className="border border-slate-200 rounded-xl overflow-x-auto">
                 <table className="w-full text-left border-collapse bg-white text-xs" id="assets-sheet-table">
                   <thead>
@@ -1657,16 +1733,6 @@ export default function Dashboard({
           {/* SHEET 7: FD & BANK BALANCES */}
           {activeReportTab === "bank_balances" && (
             <div className="space-y-4">
-              <div className="bg-sky-50/40 p-4 rounded-xl border border-sky-100/30 text-slate-700 text-xs flex gap-3">
-                <Info className="h-5 w-5 text-sky-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-sky-900">Sheet 7: Fixed Deposits & Bank Balances Register</p>
-                  <p className="mt-0.5 leading-relaxed">
-                    Overview of liquid bank deposits and long-term fixed deposits held by each chapter including Sl. No., Date, Chapter ID No., Chapter Name, Amount Type (FD vs Bank Balance), and Balance Amount (INR).
-                  </p>
-                </div>
-              </div>
-
               <div className="border border-slate-200 rounded-xl overflow-x-auto">
                 <table className="w-full text-left border-collapse bg-white text-xs" id="bank-balances-sheet-table">
                   <thead>
@@ -1713,16 +1779,6 @@ export default function Dashboard({
           {/* SHEET 8: CHAPTER DIRECTORY / MASTER */}
           {activeReportTab === "chapters" && (
             <div className="space-y-4">
-              <div className="bg-slate-100 p-4 rounded-xl border border-slate-200/80 text-slate-700 text-xs flex gap-3">
-                <Info className="h-5 w-5 text-slate-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-slate-900">Sheet 8: Chapter Directory / Master Register</p>
-                  <p className="mt-0.5 leading-relaxed">
-                    Master contact and leadership directory for all IHMA chapters containing Sl. No., Chapter ID, Chapter Name, State, District, Chapter Address, President ID & Name, VP ID & Name, General Secretary ID & Name, Treasurer ID & Name, Contact Nos., Email, and Formation Date.
-                  </p>
-                </div>
-              </div>
-
               <div className="border border-slate-200 rounded-xl overflow-x-auto">
                 <table className="w-full text-left border-collapse bg-white text-xs" id="chapters-sheet-table">
                   <thead>
@@ -1783,16 +1839,6 @@ export default function Dashboard({
           {/* TAB A: AGGREGATED MONTHLY SUMMARY SHEET */}
           {activeReportTab === "monthly" && (
             <div className="space-y-4">
-              <div className="bg-blue-50/40 p-4 rounded-xl border border-blue-100/30 text-slate-700 text-xs flex gap-3">
-                <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-blue-900">Spreadsheet Auto-Aggregation Protocol</p>
-                  <p className="mt-0.5 leading-relaxed">
-                    This sheet acts as your digital monthly report. It matches your requested workflow: it groups individual receipts and payments by their <strong>Account Head</strong>, totals the figures automatically, and compresses sequential and multi-item Voucher IDs (e.g. <code>RV-101 to RV-103</code>) for convenient administrative accounting.
-                  </p>
-                </div>
-              </div>
-
               <div className="border border-slate-200 rounded-xl overflow-x-auto">
                 <table className="w-full text-left border-collapse" id="aggregated-summary-table">
                   <thead>
@@ -1864,16 +1910,6 @@ export default function Dashboard({
           {/* TAB B: ANNUAL MATRIX SUMMARY SHEET */}
           {activeReportTab === "yearly" && (
             <div className="space-y-4">
-              <div className="bg-blue-50/40 p-4 rounded-xl border border-blue-100/30 text-slate-700 text-xs flex gap-3">
-                <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-blue-900">Financial Year Master Spreadsheet Format</p>
-                  <p className="mt-0.5 leading-relaxed">
-                    This displays monthly collections for each account head during the Indian Financial Year (<strong>April {selectedYear} to March {selectedYear + 1}</strong>). Useful for tax compliance, state audit declarations, and comparative chapter growth analytics.
-                  </p>
-                </div>
-              </div>
-
               <div className="border border-slate-200 rounded-xl overflow-x-auto">
                 <table className="w-full text-left border-collapse min-w-[950px]" id="annual-matrix-table">
                   <thead>
@@ -1893,8 +1929,8 @@ export default function Dashboard({
                     </tr>
                     {yearlyMatrix
                       .filter((row) => row.type === HeadType.Income)
-                      .map((row) => (
-                        <tr key={row.headName} className="hover:bg-slate-50/40 transition-colors">
+                      .map((row, rowIdx) => (
+                        <tr key={row.headId || `inc_${row.headName}_${rowIdx}`} className="hover:bg-slate-50/40 transition-colors">
                           <td className="py-2.5 px-3 font-semibold text-slate-800">{row.headName}</td>
                           <td className="py-2.5 px-2 text-blue-700 font-bold text-[9px]">Receipt</td>
                           {row.monthlyTotals.map((tot, idx) => (
@@ -1914,8 +1950,8 @@ export default function Dashboard({
                     </tr>
                     {yearlyMatrix
                       .filter((row) => row.type === HeadType.Expense)
-                      .map((row) => (
-                        <tr key={row.headName} className="hover:bg-slate-50/40 transition-colors">
+                      .map((row, rowIdx) => (
+                        <tr key={row.headId || `exp_${row.headName}_${rowIdx}`} className="hover:bg-slate-50/40 transition-colors">
                           <td className="py-2.5 px-3 font-semibold text-slate-800">{row.headName}</td>
                           <td className="py-2.5 px-2 text-rose-700 font-bold text-[9px]">Payment</td>
                           {row.monthlyTotals.map((tot, idx) => (
@@ -2027,7 +2063,154 @@ export default function Dashboard({
         </div>
       </div>
     </div>
-    )}
+
+      {/* LOAN REPAYMENT MODAL */}
+      {repayModalTx && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden">
+            <div className="bg-gradient-to-r from-emerald-900 to-teal-900 text-white p-4 flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-sm flex items-center gap-1.5">
+                  <span>💼</span> Record Loan Repayment
+                </h3>
+                <p className="text-[11px] text-emerald-200">
+                  Loan to: {repayModalTx.paidToName || repayModalTx.paidToId || "Member"}
+                </p>
+              </div>
+              <button
+                onClick={() => setRepayModalTx(null)}
+                className="p-1 text-emerald-200 hover:text-white rounded-lg cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 flex justify-between text-xs">
+                <div>
+                  <span className="text-emerald-700 font-semibold block">Original Loan</span>
+                  <span className="text-sm font-black text-emerald-950">₹{repayModalTx.amount.toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-emerald-700 font-semibold block">Outstanding Balance</span>
+                  <span className="text-sm font-black text-indigo-900">
+                    ₹{(repayModalTx.loanBalance !== undefined ? repayModalTx.loanBalance : (repayModalTx.amount - (repayModalTx.amountReturned || 0))).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Repayment Amount Received (₹) <span className="text-rose-600">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={repayModalTx.loanBalance !== undefined ? repayModalTx.loanBalance : (repayModalTx.amount - (repayModalTx.amountReturned || 0))}
+                  value={repaymentAmount || ""}
+                  onChange={(e) => setRepaymentAmount(parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 text-sm font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Remarks / Payment Receipt Note
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Bank transfer ref #1234 or cash receipt"
+                  value={repaymentRemarks}
+                  onChange={(e) => setRepaymentRemarks(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Mode of Repayment <span className="text-rose-600">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRepaymentMode("Cash")}
+                    className={`py-2 px-3 text-xs font-bold rounded-xl border flex items-center justify-center gap-1.5 cursor-pointer ${
+                      repaymentMode === "Cash"
+                        ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
+                        : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span>💵 Cash</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRepaymentMode("Bank")}
+                    className={`py-2 px-3 text-xs font-bold rounded-xl border flex items-center justify-center gap-1.5 cursor-pointer ${
+                      repaymentMode === "Bank"
+                        ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
+                        : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span>🏦 Bank</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Repayment Date
+                </label>
+                <input
+                  type="date"
+                  value={repaymentDate}
+                  onChange={(e) => setRepaymentDate(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-bold border border-slate-300 rounded-xl bg-white"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setRepayModalTx(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!repayModalTx || !repaymentAmount || repaymentAmount <= 0) return;
+                    const currentReturned = repayModalTx.amountReturned || 0;
+                    const newReturned = currentReturned + repaymentAmount;
+                    const newBal = Math.max(0, repayModalTx.amount - newReturned);
+
+                    const updatedTx: Transaction = {
+                      ...repayModalTx,
+                      amountReturned: newReturned,
+                      loanBalance: newBal,
+                      repaymentPaymentMode: repaymentMode,
+                      repaymentDate: repaymentDate,
+                      loanReturnedDate: newBal === 0 ? repaymentDate : repayModalTx.loanReturnedDate,
+                      remarks: repaymentRemarks
+                        ? `${repayModalTx.remarks ? repayModalTx.remarks + " | " : ""}Repaid ₹${repaymentAmount} via ${repaymentMode} on ${formatDateDMY(repaymentDate)}: ${repaymentRemarks}`
+                        : repayModalTx.remarks,
+                    };
+
+                    if (onUpdateTransaction) {
+                      onUpdateTransaction(updatedTx);
+                    }
+                    setRepayModalTx(null);
+                  }}
+                  className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md cursor-pointer flex items-center gap-1.5"
+                >
+                  <Check className="h-4 w-4" />
+                  <span>Save Repayment (Income)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

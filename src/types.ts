@@ -161,10 +161,24 @@ export interface Transaction {
   loanBalance?: number; // Outstanding balance
   loanReturnDate?: string; // Agreed return date
   loanReturnedDate?: string; // Actual return date
+  repaymentPaymentMode?: "Cash" | "Bank"; // Mode of payment for loan repayment
+  repaymentDate?: string; // Date of repayment
   remarks?: string; // Additional notes
 }
 
 // 7. Member Directory Schema (Sheet 7)
+export interface MemberQualification {
+  id?: string;
+  degree: string; // e.g., BHMS, MD (Homeo), MBBS, BAMS, BDS, DHMS, PhD, DNB, M.Sc, MPH, etc.
+  degreeTitle?: string; // Specialization / Branch e.g., Homoeopathic Materia Medica
+  institution?: string; // College / Institution e.g. Govt Homoeopathic Medical College
+  university?: string; // University e.g. KUHS / Kerala University
+  yearOfPassing?: string; // Year of passing e.g. 1998
+  medicalCouncilName?: string; // Council Name e.g. Travancore-Cochin Medical Council
+  medicalCouncilState?: string; // Council State e.g. Kerala
+  registrationNumber?: string; // Medical Registration No e.g. TCMC/HOM/12345
+}
+
 export interface Member {
   slNo: number;
   id: string;
@@ -172,14 +186,26 @@ export interface Member {
   memberName: string; // Full name
   chapterIdInput: string; // Reference chapter ID
   chapterNameInput: string; // Chapter Name
-  qualification: string; // Professional qualification
-  membershipType: "General" | "Gold" | "Platinum";
+  qualification: string; // Professional qualification summary
+  qualificationsList?: MemberQualification[]; // Multi-qualification array
+  membershipType: "General" | "Silver" | "Gold" | "Platinum";
   membershipDate: string; // YYYY-MM-DD
   membershipStatus: "Active" | "Hold" | "Expired";
   mobileNumber: string;
   whatsappNumber: string;
   email: string;
   clinicNumber: string;
+
+  // Additional Related & General Doctor Attributes
+  gender?: "Male" | "Female" | "Other" | string;
+  dob?: string;
+  bloodGroup?: string;
+  specialization?: string; // Clinical practice specialty
+  yearsOfPractice?: string;
+  clinicAddress?: string;
+  residentialAddress?: string;
+  associationRole?: string; // Designation in IHMA
+  emergencyContact?: string;
 }
 
 export interface FinancialYear {

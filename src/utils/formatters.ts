@@ -47,3 +47,19 @@ export function formatINR(amount: number): string {
     maximumFractionDigits: 0,
   }).format(amount);
 }
+
+/**
+ * Ensures a member or doctor name always starts with "Dr. " prefix.
+ * e.g., "Basheer" -> "Dr. Basheer"
+ * e.g., "Dr. George Paul" -> "Dr. George Paul"
+ */
+export function ensureDoctorPrefix(name: string): string {
+  if (!name || !name.trim()) return "Dr. Unnamed";
+  let trimmed = name.trim();
+  if (/^dr\.?\s*/i.test(trimmed)) {
+    trimmed = trimmed.replace(/^dr\.?\s*/i, "");
+  }
+  trimmed = trimmed.trim();
+  if (!trimmed) return "Dr. Unnamed";
+  return `Dr. ${trimmed}`;
+}

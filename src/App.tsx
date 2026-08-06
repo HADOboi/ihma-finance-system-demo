@@ -6,6 +6,7 @@
 import { useState, useEffect } from "react";
 import { User, AccountHead, Transaction, OrgLevel, UserRole, HeadType, Asset, BankBalance, ChapterMaster, Member, ReportTab } from "./types";
 import { loadDatabase, saveDatabase, resetToDefaults, CHAPTERS } from "./mockData";
+import { ensureDoctorPrefix } from "./utils/formatters";
 import Login from "./components/Login";
 import TreasurerEntry from "./components/TreasurerEntry";
 import AdminPanel from "./components/AdminPanel";
@@ -157,7 +158,8 @@ export default function App() {
     if (!db) return;
     const id = `mem_${Date.now()}`;
     const slNo = db.members.length + 1;
-    const fullMember: Member = { ...newMember, id, slNo };
+    const formattedName = ensureDoctorPrefix(newMember.memberName);
+    const fullMember: Member = { ...newMember, memberName: formattedName, id, slNo };
     syncDatabase({ ...db, members: [fullMember, ...db.members] });
   };
 
@@ -579,6 +581,7 @@ export default function App() {
                 setEditingTransaction(tx);
                 setCurrentView("home");
               }}
+              onUpdateTransaction={handleUpdateTransaction}
               initialReportTab={activeReportTab}
             />
           </div>
@@ -625,7 +628,7 @@ export default function App() {
       <footer className="bg-white border-t border-slate-200/80 py-6 mt-12 text-center text-xs text-slate-400 font-medium">
         <p>© 2026 Indian Homeopathic Medical Association. All rights reserved.</p>
         <p className="mt-1 flex items-center justify-center gap-1 font-mono text-[10px] text-slate-350">
-          <Sparkles className="h-3 w-3" /> IHMA FinApp system designed & deployed for localized secure demonstrations.
+          <Sparkles className="h-3 w-3" /> IHMA Ledger system designed & deployed for localized secure demonstrations.
         </p>
       </footer>
     </div>
