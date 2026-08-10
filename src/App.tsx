@@ -293,7 +293,7 @@ export default function App() {
               }`}
             >
               <BarChart3 className="h-3.5 w-3.5 text-teal-600" />
-              <span className="hidden xs:inline sm:inline">Reports & Summaries</span>
+              <span className="hidden xs:inline sm:inline">Reports</span>
               <span className="xs:hidden sm:hidden">Reports</span>
             </button>
 
@@ -398,13 +398,10 @@ export default function App() {
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="bg-teal-300/20 text-teal-100 border border-teal-300/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                            <span className="text-lg font-bold text-white font-display">
                               Financial Reports
                             </span>
                           </div>
-                          <h3 className="font-bold text-lg text-white font-display mt-0.5">
-                            View reports & summaries
-                          </h3>
                         </div>
                       </div>
 
@@ -546,27 +543,6 @@ export default function App() {
         {/* ---------------- VIEW 2: REPORTS & SUMMARIES PAGE ---------------- */}
         {currentView === "reports" && (
           <div className="space-y-6 animate-fadeIn">
-            {/* Top Back Navigation Bar */}
-            <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-xs">
-              <button
-                onClick={() => setCurrentView("home")}
-                id="back-to-home-button"
-                className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-all cursor-pointer"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span>Back to Home</span>
-              </button>
-
-              <div className="text-right">
-                <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
-                  IHMA Financial Statements
-                </span>
-                <span className="text-sm font-black text-slate-800">
-                  Reports & Summaries Console
-                </span>
-              </div>
-            </div>
-
             {/* Dashboard Component containing all filters, charts, metrics, and 11 report sheets */}
             <Dashboard
               currentUser={currentUser}
@@ -583,6 +559,7 @@ export default function App() {
               }}
               onUpdateTransaction={handleUpdateTransaction}
               initialReportTab={activeReportTab}
+              onBackToHome={() => setCurrentView("home")}
             />
           </div>
         )}

@@ -68,6 +68,7 @@ interface DashboardProps {
   onEditTransaction: (tx: Transaction) => void;
   onUpdateTransaction?: (tx: Transaction) => void;
   initialReportTab?: ReportTab;
+  onBackToHome?: () => void;
 }
 
 type PeriodType = "year" | "month" | "day" | "custom";
@@ -97,6 +98,7 @@ export default function Dashboard({
   onEditTransaction,
   onUpdateTransaction,
   initialReportTab,
+  onBackToHome,
 }: DashboardProps) {
   // --- Date Range / Period State ---
   const [periodType, setPeriodType] = useState<PeriodType>("year");
@@ -110,6 +112,12 @@ export default function Dashboard({
   // Custom Date Range (From Date -> To Date)
   const [startDate, setStartDate] = useState<string>("2026-04-01");
   const [endDate, setEndDate] = useState<string>("2026-06-30");
+  const [detailPeriodType, setDetailPeriodType] = useState<PeriodType>("year");
+  const [detailYear, setDetailYear] = useState<number>(2026);
+  const [detailMonth, setDetailMonth] = useState<number>(5);
+  const [detailDay, setDetailDay] = useState<string>("2026-06-01");
+  const [detailStartDate, setDetailStartDate] = useState<string>("2026-04-01");
+  const [detailEndDate, setDetailEndDate] = useState<string>("2027-03-31");
 
   // Loan Repayment Modal State
   const [repayModalTx, setRepayModalTx] = useState<Transaction | null>(null);
@@ -152,6 +160,9 @@ export default function Dashboard({
 
   // Search filter
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedExpenseHeads, setSelectedExpenseHeads] = useState<string[]>([]);
+  const [selectedIncomeHeads, setSelectedIncomeHeads] = useState<string[]>([]);
+  const [isHeadFilterOpen, setIsHeadFilterOpen] = useState(false);
 
   // Report Sheet View Tab
   const [activeReportTab, setActiveReportTab] = useState<ReportTab>(initialReportTab || "payments");
@@ -251,9 +262,9 @@ export default function Dashboard({
     setSelectedChapters(availableChapters.map((c) => c.id));
   };
 
-  // --- Filter Transactions by Date Range and Hierarchical Selection ---
-  const filteredTransactions = useMemo(() => {
-    return transactions.filter((tx) => {
+  const filterTransactions = (
+    period: PeriodType, year: number, month: number, day: string, from: string, to: string, includeSearch = false
+  ) => transactions.filter((tx) => {
       // 1. Organizational chapter filter
       if (!selectedChapters.includes(tx.chapterId)) {
         return false;
@@ -266,30 +277,30 @@ export default function Dashboard({
       const txYear = parts.length > 0 ? parseInt(parts[0], 10) : 0;
       const txMonth = parts.length > 1 ? parseInt(parts[1], 10) - 1 : 0;
 
-      if (periodType === "year") {
+      if (period === "year") {
         // Indian Financial Year: April of selectedYear to March of selectedYear + 1
-        const startStr = `${selectedYear}-04-01`;
-        const endStr = `${selectedYear + 1}-03-31`;
+        const startStr = `${year}-04-01`;
+        const endStr = `${year + 1}-03-31`;
         if (dateStr < startStr || dateStr > endStr) {
           return false;
         }
-      } else if (periodType === "month") {
+      } else if (period === "month") {
         // Specific Month in selected Year
-        if (txYear !== selectedYear || txMonth !== selectedMonth) {
+        if (txYear !== year || txMonth !== month) {
           return false;
         }
-      } else if (periodType === "day") {
+      } else if (period === "day") {
         // Specific Day YYYY-MM-DD
-        if (dateStr !== selectedDay) {
+        if (dateStr !== day) {
           return false;
         }
-      } else if (periodType === "custom") {
-        if (startDate && dateStr < startDate) return false;
-        if (endDate && dateStr > endDate) return false;
+      } else if (period === "custom") {
+        if (from && dateStr < from) return false;
+        if (to && dateStr > to) return false;
       }
 
       // 3. Optional Search Text (remarks or voucher)
-      if (searchTerm.trim() !== "") {
+      if (includeSearch && searchTerm.trim() !== "") {
         const term = searchTerm.toLowerCase();
         const searchDesc = (tx.description || "").toLowerCase();
         const searchVouch = (tx.voucherNumber || "").toLowerCase();
@@ -301,7 +312,16 @@ export default function Dashboard({
 
       return true;
     });
-  }, [transactions, selectedChapters, periodType, selectedYear, selectedMonth, selectedDay, startDate, endDate, searchTerm]);
+
+  // Summary and Detailed Report deliberately have independent date ranges.
+  const filteredTransactions = useMemo(
+    () => filterTransactions(periodType, selectedYear, selectedMonth, selectedDay, startDate, endDate),
+    [transactions, selectedChapters, periodType, selectedYear, selectedMonth, selectedDay, startDate, endDate]
+  );
+  const detailedTransactions = useMemo(
+    () => filterTransactions(detailPeriodType, detailYear, detailMonth, detailDay, detailStartDate, detailEndDate, true),
+    [transactions, selectedChapters, detailPeriodType, detailYear, detailMonth, detailDay, detailStartDate, detailEndDate, searchTerm]
+  );
 
   // --- Summary Metrics Computations (Cash vs Bank & Income vs Expense Breakdown) ---
   const summaryMetrics = useMemo(() => {
@@ -571,21 +591,52 @@ export default function Dashboard({
 
   // Derived filtered collections for specific sheets
   const filteredPayments = useMemo(() => {
-    return filteredTransactions.filter(tx => tx.type === HeadType.Expense);
-  }, [filteredTransactions]);
+    return detailedTransactions.filter((tx) =>
+      tx.type === HeadType.Expense &&
+      (selectedExpenseHeads.length === 0 || selectedExpenseHeads.includes(tx.headId))
+    );
+  }, [detailedTransactions, selectedExpenseHeads]);
 
   const filteredReceipts = useMemo(() => {
-    return filteredTransactions.filter(tx => tx.type === HeadType.Income);
-  }, [filteredTransactions]);
+    return detailedTransactions.filter((tx) =>
+      tx.type === HeadType.Income &&
+      (selectedIncomeHeads.length === 0 || selectedIncomeHeads.includes(tx.headId))
+    );
+  }, [detailedTransactions, selectedIncomeHeads]);
 
   const filteredLoans = useMemo(() => {
-    return filteredTransactions.filter(tx => tx.type === HeadType.Loan);
-  }, [filteredTransactions]);
+    return detailedTransactions.filter(tx => tx.type === HeadType.Loan);
+  }, [detailedTransactions]);
+
+  // Detailed directory records use the displayed chapter ID (for example,
+  // "KL-EK-CO01"), while transactions use the internal ID ("cochin").
+  // Build the allowed displayed IDs and names from the currently scoped chapters
+  // so every report observes the same national/state/district/local boundary.
+  const allowedChapterDirectoryIds = useMemo(() => {
+    const allowedNames = new Set(
+      CHAPTERS.filter((chapter) => selectedChapters.includes(chapter.id)).map((chapter) => chapter.name)
+    );
+    return new Set(
+      chapterDirectory
+        .filter((chapter) => allowedNames.has(chapter.chapterName))
+        .map((chapter) => chapter.id)
+    );
+  }, [chapterDirectory, selectedChapters]);
+
+  const isChapterInScope = (chapterId?: string, chapterName?: string) =>
+    selectedChapters.includes(chapterId || "") ||
+    allowedChapterDirectoryIds.has(chapterId || "") ||
+    CHAPTERS.some(
+      (chapter) => selectedChapters.includes(chapter.id) && chapter.name === chapterName
+    );
 
   const filteredMembers = useMemo(() => {
-    if (!searchTerm.trim()) return members;
+    const scopedMembers = members.filter((member) =>
+      isChapterInScope(member.chapterIdInput, member.chapterNameInput)
+    );
+    if (!searchTerm.trim()) return scopedMembers;
     const term = searchTerm.toLowerCase();
-    return members.filter(
+    return scopedMembers.filter(
       (m) =>
         m.memberName.toLowerCase().includes(term) ||
         m.memberId.toLowerCase().includes(term) ||
@@ -594,12 +645,15 @@ export default function Dashboard({
         m.email.toLowerCase().includes(term) ||
         m.mobileNumber.toLowerCase().includes(term)
     );
-  }, [members, searchTerm]);
+  }, [members, searchTerm, selectedChapters, allowedChapterDirectoryIds]);
 
   const filteredAssets = useMemo(() => {
-    if (!searchTerm.trim()) return assets;
+    const scopedAssets = assets.filter((asset) =>
+      isChapterInScope(asset.chapterIdInput, asset.chapterNameInput)
+    );
+    if (!searchTerm.trim()) return scopedAssets;
     const term = searchTerm.toLowerCase();
-    return assets.filter(
+    return scopedAssets.filter(
       (a) =>
         a.assetName.toLowerCase().includes(term) ||
         a.assetId.toLowerCase().includes(term) ||
@@ -607,23 +661,29 @@ export default function Dashboard({
         a.custodianName.toLowerCase().includes(term) ||
         a.chapterNameInput.toLowerCase().includes(term)
     );
-  }, [assets, searchTerm]);
+  }, [assets, searchTerm, selectedChapters, allowedChapterDirectoryIds]);
 
   const filteredBankBalances = useMemo(() => {
-    if (!searchTerm.trim()) return bankBalances;
+    const scopedBankBalances = bankBalances.filter((balance) =>
+      isChapterInScope(balance.chapterIdInput, balance.chapterNameInput)
+    );
+    if (!searchTerm.trim()) return scopedBankBalances;
     const term = searchTerm.toLowerCase();
-    return bankBalances.filter(
+    return scopedBankBalances.filter(
       (b) =>
         b.chapterNameInput.toLowerCase().includes(term) ||
         b.chapterIdInput.toLowerCase().includes(term) ||
         b.amountType.toLowerCase().includes(term)
     );
-  }, [bankBalances, searchTerm]);
+  }, [bankBalances, searchTerm, selectedChapters, allowedChapterDirectoryIds]);
 
   const filteredChapters = useMemo(() => {
-    if (!searchTerm.trim()) return chapterDirectory;
+    const scopedChapters = chapterDirectory.filter((chapter) =>
+      isChapterInScope(chapter.id, chapter.chapterName)
+    );
+    if (!searchTerm.trim()) return scopedChapters;
     const term = searchTerm.toLowerCase();
-    return chapterDirectory.filter(
+    return scopedChapters.filter(
       (c) =>
         c.chapterName.toLowerCase().includes(term) ||
         c.id.toLowerCase().includes(term) ||
@@ -633,7 +693,7 @@ export default function Dashboard({
         c.treasurerName.toLowerCase().includes(term) ||
         c.email.toLowerCase().includes(term)
     );
-  }, [chapterDirectory, searchTerm]);
+  }, [chapterDirectory, searchTerm, selectedChapters, allowedChapterDirectoryIds]);
 
   // Export to simple CSV helper
   const handleExportCSV = () => {
@@ -694,7 +754,7 @@ export default function Dashboard({
       });
     } else {
       csvContent += "Date,Type,Category,Amount,Voucher,Remarks,Chapter,Recorded By\n";
-      filteredTransactions.forEach((tx) => {
+      detailedTransactions.forEach((tx) => {
         const chapName = CHAPTERS.find((c) => c.id === tx.chapterId)?.name || tx.chapterId;
         csvContent += `"${tx.date}","${tx.type}","${tx.headName}",${tx.amount},"${tx.voucherNumber || ""}","${tx.description || ""}","${chapName}","${tx.createdBy}"\n`;
       });
@@ -714,12 +774,7 @@ export default function Dashboard({
       {/* 1. SELECTION FILTERS PANEL (Based on User's Org Level) */}
       <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs" id="dashboard-filters-container">
         <div className="flex items-center gap-2 mb-4 text-emerald-950 font-bold text-base border-b border-slate-100 pb-3">
-          <Filter className="h-5 w-5 text-emerald-800" />
-          <span>Report Filters</span>
-          <span className="ml-auto text-xs font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full flex items-center gap-1">
-            <Layers className="h-3.5 w-3.5 text-emerald-700" />
-            Level: {currentUser.level}
-          </span>
+          {onBackToHome && <button type="button" onClick={onBackToHome} id="back-to-home-button" className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded-xl border border-slate-200" aria-label="Back to home"><ArrowLeft className="h-4 w-4" />Back to Home</button>}
         </div>
 
         <div className="space-y-5">
@@ -837,17 +892,21 @@ export default function Dashboard({
 
             {/* Local Chapter Information */}
             {currentUser.level === OrgLevel.Local && (
-              <div className="bg-blue-50/40 p-3.5 border border-blue-100 rounded-xl flex items-center justify-between">
+              <div className="bg-blue-50/40 p-3.5 border border-blue-100 rounded-xl grid grid-cols-3 gap-3">
                 <div>
-                  <span className="text-xs text-slate-500 uppercase font-semibold">Your Local Chapter Assignment</span>
+                  <span className="text-xs text-slate-500 uppercase font-semibold">Chapter</span>
                   <p className="text-sm font-bold text-blue-900 mt-0.5">
-                    {CHAPTERS.find((c) => c.id === currentUser.nodeId)?.name || currentUser.nodeId} Chapter
+                    {CHAPTERS.find((c) => c.id === currentUser.nodeId)?.name || currentUser.nodeId}
                   </p>
                 </div>
+                <div className="text-center">
+                  <span className="text-xs text-slate-500 uppercase font-semibold">Level</span>
+                  <p className="text-sm font-bold text-blue-900 mt-0.5">{currentUser.level}</p>
+                </div>
                 <div className="text-right">
-                  <span className="text-xs text-slate-500 uppercase font-semibold">Role Privilege</span>
-                  <p className="text-sm font-bold text-blue-900 mt-0.5 flex items-center gap-1">
-                    {currentUser.role === "Treasurer" ? "Treasurer (Editor)" : "General User (Read-Only)"}
+                  <span className="text-xs text-slate-500 uppercase font-semibold">Role</span>
+                  <p className="text-sm font-bold text-blue-900 mt-0.5 flex items-center justify-end gap-1">
+                    {currentUser.role === "Treasurer" ? "Treasurer (R/W)" : `${currentUser.role} (RO)`}
                   </p>
                 </div>
               </div>
@@ -855,11 +914,11 @@ export default function Dashboard({
           </div>
 
           {/* Date Range Selector Bar */}
-          <div className="bg-[#F8FAFC] p-4 border border-slate-200/80 rounded-2xl space-y-3">
+          <div className="hidden bg-[#F8FAFC] p-4 border border-slate-200/80 rounded-2xl space-y-3">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div className="flex items-center gap-2">
                 <Calendar className="h-4.5 w-4.5 text-blue-600" />
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Select Period Range</span>
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Summary Period</span>
               </div>
 
               {/* Range Type Buttons */}
@@ -965,13 +1024,24 @@ export default function Dashboard({
       {/* SECTION 1: SUMMARY */}
       <div className="space-y-4">
         <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-          <h2 className="text-xl font-black text-slate-900 font-display tracking-tight">Summary</h2>
+          <h2 className="text-base font-bold text-emerald-950">Summary</h2>
           <span className="text-xs font-semibold text-slate-500">
             {periodType === "year" && `Financial Year ${selectedYear}-${(selectedYear + 1).toString().slice(2)}`}
             {periodType === "month" && `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][selectedMonth]} ${selectedYear}`}
             {periodType === "day" && formatDateDMY(selectedDay)}
             {periodType === "custom" && `${formatDateDMY(startDate)} to ${formatDateDMY(endDate)}`}
           </span>
+        </div>
+
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center gap-3">
+          <div className="flex items-center gap-2 shrink-0"><Calendar className="h-4 w-4 text-blue-600" /><span className="text-xs font-bold text-slate-800">Summary period</span></div>
+          <div className="flex flex-wrap gap-1 bg-white border border-slate-200 rounded-xl p-1">{(["year", "month", "day", "custom"] as PeriodType[]).map((type) => <button key={type} type="button" onClick={() => setPeriodType(type)} className={`px-2.5 py-1 text-[11px] font-bold rounded-lg capitalize ${periodType === type ? "bg-blue-600 text-white" : "text-slate-600"}`}>{type}</button>)}</div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {(periodType === "year" || periodType === "month") && <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} className="px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-semibold"><option value={2026}>2026–27</option><option value={2025}>2025–26</option><option value={2024}>2024–25</option></select>}
+            {periodType === "month" && <select value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))} className="px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white">{["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => <option key={m} value={i}>{m}</option>)}</select>}
+            {periodType === "day" && <input type="date" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} className="px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white" />}
+            {periodType === "custom" && <><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white" /><span>to</span><input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white" /></>}
+          </div>
         </div>
 
         {/* SUMMARY TABLES GRID */}
@@ -982,9 +1052,6 @@ export default function Dashboard({
               <h3 className="font-bold text-xs uppercase tracking-wider text-emerald-950 flex items-center gap-1.5">
                 <span>💰</span> Receipts (Income)
               </h3>
-              <span className="text-[11px] font-bold text-emerald-700 bg-white px-2 py-0.5 rounded-full border border-emerald-200">
-                Total: ₹{summaryMetrics.totalIncomeGrand.toLocaleString()}
-              </span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
@@ -998,7 +1065,7 @@ export default function Dashboard({
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800">
                   <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-4 font-semibold text-slate-800">Actual Income</td>
+                    <td className="py-2.5 px-4 font-semibold text-slate-800">Actual Receipts (Income)</td>
                     <td className="py-2.5 px-4 text-right font-mono">₹{summaryMetrics.actualIncomeCash.toLocaleString()}</td>
                     <td className="py-2.5 px-4 text-right font-mono">₹{summaryMetrics.actualIncomeBank.toLocaleString()}</td>
                     <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900 bg-slate-50/60">
@@ -1018,7 +1085,7 @@ export default function Dashboard({
                     </td>
                   </tr>
                   <tr className="bg-emerald-50/60 font-black text-emerald-950 border-t-2 border-emerald-200">
-                    <td className="py-3 px-4 uppercase text-[11px] tracking-wider">TOTAL RECEIPTS</td>
+                    <td className="py-3 px-4 uppercase text-[11px] tracking-wider">Total Receipts (Income)</td>
                     <td className="py-3 px-4 text-right font-mono">₹{summaryMetrics.totalIncomeCash.toLocaleString()}</td>
                     <td className="py-3 px-4 text-right font-mono">₹{summaryMetrics.totalIncomeBank.toLocaleString()}</td>
                     <td className="py-3 px-4 text-right font-mono text-sm bg-emerald-100/70 text-emerald-950">
@@ -1034,11 +1101,8 @@ export default function Dashboard({
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
             <div className="px-4 py-3 bg-rose-50/80 border-b border-rose-100 flex items-center justify-between">
               <h3 className="font-bold text-xs uppercase tracking-wider text-rose-950 flex items-center gap-1.5">
-                <span>💸</span> Payments (Expenses)
+                <span>💸</span> Payments (Expense)
               </h3>
-              <span className="text-[11px] font-bold text-rose-700 bg-white px-2 py-0.5 rounded-full border border-rose-200">
-                Total: ₹{summaryMetrics.totalExpenseGrand.toLocaleString()}
-              </span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
@@ -1052,7 +1116,7 @@ export default function Dashboard({
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800">
                   <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-4 font-semibold text-slate-800">Actual Expenses</td>
+                    <td className="py-2.5 px-4 font-semibold text-slate-800">Actual Payments (Expense)</td>
                     <td className="py-2.5 px-4 text-right font-mono">₹{summaryMetrics.actualExpenseCash.toLocaleString()}</td>
                     <td className="py-2.5 px-4 text-right font-mono">₹{summaryMetrics.actualExpenseBank.toLocaleString()}</td>
                     <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900 bg-slate-50/60">
@@ -1060,7 +1124,7 @@ export default function Dashboard({
                     </td>
                   </tr>
                   <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-4 font-semibold text-slate-800">Loans Given (Outflow)</td>
+                    <td className="py-2.5 px-4 font-semibold text-slate-800">Loan Payments</td>
                     <td className="py-2.5 px-4 text-right font-mono">
                       {summaryMetrics.loansGivenCash > 0 ? `₹${summaryMetrics.loansGivenCash.toLocaleString()}` : "—"}
                     </td>
@@ -1072,7 +1136,7 @@ export default function Dashboard({
                     </td>
                   </tr>
                   <tr className="bg-rose-50/60 font-black text-rose-950 border-t-2 border-rose-200">
-                    <td className="py-3 px-4 uppercase text-[11px] tracking-wider">TOTAL PAYMENTS</td>
+                    <td className="py-3 px-4 uppercase text-[11px] tracking-wider">Total Payments (Expense)</td>
                     <td className="py-3 px-4 text-right font-mono">₹{summaryMetrics.totalExpenseCash.toLocaleString()}</td>
                     <td className="py-3 px-4 text-right font-mono">₹{summaryMetrics.totalExpenseBank.toLocaleString()}</td>
                     <td className="py-3 px-4 text-right font-mono text-sm bg-rose-100/70 text-rose-950">
@@ -1089,7 +1153,7 @@ export default function Dashboard({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
           <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs flex justify-between items-center">
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Net Cash Balance</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Cash in Hand</span>
               <span className={`text-base font-black ${summaryMetrics.netCashBalance >= 0 ? "text-slate-900" : "text-rose-700"}`}>
                 ₹{summaryMetrics.netCashBalance.toLocaleString()}
               </span>
@@ -1099,7 +1163,7 @@ export default function Dashboard({
 
           <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs flex justify-between items-center">
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Net Bank Balance</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Cash at Bank</span>
               <span className={`text-base font-black ${summaryMetrics.netBankBalance >= 0 ? "text-slate-900" : "text-rose-700"}`}>
                 ₹{summaryMetrics.netBankBalance.toLocaleString()}
               </span>
@@ -1109,7 +1173,7 @@ export default function Dashboard({
 
           <div className="bg-slate-900 text-white border border-slate-800 rounded-xl p-3.5 shadow-xs flex justify-between items-center">
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Net Surplus / Deficit</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Surplus / Deficit</span>
               <span className={`text-base font-black ${summaryMetrics.netTotalBalance >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
                 {summaryMetrics.netTotalBalance >= 0 ? "+" : ""}₹{summaryMetrics.netTotalBalance.toLocaleString()}
               </span>
@@ -1122,7 +1186,25 @@ export default function Dashboard({
       {/* SECTION 2: DETAILED REPORTS */}
       <div className="space-y-4 pt-4 border-t border-slate-200">
         <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-          <h2 className="text-xl font-black text-slate-900 font-display tracking-tight">Detailed Report</h2>
+          <h2 className="text-base font-bold text-emerald-950">Detailed Report</h2>
+        </div>
+
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center gap-3">
+          <div className="flex items-center gap-2 shrink-0">
+            <Calendar className="h-4 w-4 text-blue-600" />
+            <span className="text-xs font-bold text-slate-800">Report period</span>
+          </div>
+          <div className="flex flex-wrap gap-1 bg-white border border-slate-200 rounded-xl p-1">
+            {(["year", "month", "day", "custom"] as PeriodType[]).map((type) => (
+              <button key={type} type="button" onClick={() => setDetailPeriodType(type)} className={`px-2.5 py-1 text-[11px] font-bold rounded-lg capitalize ${detailPeriodType === type ? "bg-blue-600 text-white" : "text-slate-600"}`}>{type}</button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {(detailPeriodType === "year" || detailPeriodType === "month") && <select value={detailYear} onChange={(e) => setDetailYear(Number(e.target.value))} className="px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-semibold"><option value={2026}>2026–27</option><option value={2025}>2025–26</option><option value={2024}>2024–25</option></select>}
+            {detailPeriodType === "month" && <select value={detailMonth} onChange={(e) => setDetailMonth(Number(e.target.value))} className="px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white">{["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => <option key={m} value={i}>{m}</option>)}</select>}
+            {detailPeriodType === "day" && <input type="date" value={detailDay} onChange={(e) => setDetailDay(e.target.value)} className="px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white" />}
+            {detailPeriodType === "custom" && <><input type="date" value={detailStartDate} onChange={(e) => setDetailStartDate(e.target.value)} className="px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white" /><span>to</span><input type="date" value={detailEndDate} onChange={(e) => setDetailEndDate(e.target.value)} className="px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white" /></>}
+          </div>
         </div>
 
         {/* ACTIVE SHEET CONTAINER */}
@@ -1137,13 +1219,13 @@ export default function Dashboard({
               {/* CUSTOM STYLED DROPDOWN */}
               {(() => {
                 const reportTabOptions = [
-                  { id: "payments" as ReportTab, label: "Payments (Expenses)", group: "Financial Registers", icon: ArrowUpRight, count: `${filteredPayments.length} entries` },
+                  { id: "payments" as ReportTab, label: "Payments (Expense)", group: "Financial Registers", icon: ArrowUpRight, count: `${filteredPayments.length} entries` },
                   { id: "receipts" as ReportTab, label: "Receipts (Income)", group: "Financial Registers", icon: ArrowDownRight, count: `${filteredReceipts.length} entries` },
                   { id: "loans" as ReportTab, label: "Temporary Loan Registry", group: "Financial Registers", icon: Briefcase, count: `${filteredLoans.length} loans` },
-                  { id: "raw" as ReportTab, label: "Consolidated Raw Ledger", group: "Financial Registers", icon: BookOpen, count: `${filteredTransactions.length} entries` },
+                  { id: "raw" as ReportTab, label: "Consolidated Raw Ledger", group: "Financial Registers", icon: BookOpen, count: `${detailedTransactions.length} entries` },
                   
                   { id: "members" as ReportTab, label: "Member Doctor Directory", group: "Directories & Masters", icon: Users, count: `${filteredMembers.length} doctors` },
-                  { id: "chapters" as ReportTab, label: "Chapter Master Directory", group: "Directories & Masters", icon: MapPin, count: `${chapterDirectory.length} chapters` },
+                  { id: "chapters" as ReportTab, label: "Chapter Master Directory", group: "Directories & Masters", icon: MapPin, count: `${filteredChapters.length} chapters` },
                   { id: "assets" as ReportTab, label: "Asset Register", group: "Directories & Masters", icon: Building2, count: `${filteredAssets.length} assets` },
                   { id: "bank_balances" as ReportTab, label: "FD & Bank Accounts", group: "Directories & Masters", icon: Landmark, count: `${filteredBankBalances.length} accounts` },
                   { id: "entity_types" as ReportTab, label: "Entity Types Taxonomy", group: "Directories & Masters", icon: Layers, count: "5 Tiers" },
@@ -1236,15 +1318,22 @@ export default function Dashboard({
             </div>
 
           <div className="flex items-center gap-3 w-full lg:w-auto">
-            {activeReportTab !== "monthly" && activeReportTab !== "yearly" && activeReportTab !== "entity_types" && (
-              <div className="relative w-full lg:w-60">
-                <input
-                  type="text"
-                  placeholder={`Search ${activeReportTab}...`}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:outline-hidden"
-                />
+            {(activeReportTab === "payments" || activeReportTab === "receipts") && (
+              <div className="relative w-full lg:w-64">
+                <button type="button" onClick={() => setIsHeadFilterOpen((open) => !open)} className="w-full flex items-center justify-between gap-2 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-700 shadow-2xs hover:border-blue-400">
+                  <span>{activeReportTab === "payments" ? "Expense heads" : "Income heads"} {((activeReportTab === "payments" ? selectedExpenseHeads : selectedIncomeHeads).length > 0) && `(${(activeReportTab === "payments" ? selectedExpenseHeads : selectedIncomeHeads).length})`}</span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${isHeadFilterOpen ? "rotate-180" : ""}`} />
+                </button>
+                {isHeadFilterOpen && (
+                  <div className="absolute right-0 z-30 mt-2 w-full bg-white rounded-xl border border-slate-200 shadow-xl p-2 space-y-1 max-h-64 overflow-y-auto">
+                    {accountHeads.filter((head) => head.type === (activeReportTab === "payments" ? HeadType.Expense : HeadType.Income)).map((head) => {
+                      const selection = activeReportTab === "payments" ? selectedExpenseHeads : selectedIncomeHeads;
+                      const checked = selection.includes(head.id);
+                      return <label key={head.id} className="flex items-center gap-2 px-2 py-2 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"><input type="checkbox" checked={checked} onChange={() => { const next = checked ? selection.filter((id) => id !== head.id) : [...selection, head.id]; activeReportTab === "payments" ? setSelectedExpenseHeads(next) : setSelectedIncomeHeads(next); }} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />{head.name}</label>;
+                    })}
+                    <button type="button" onClick={() => { activeReportTab === "payments" ? setSelectedExpenseHeads([]) : setSelectedIncomeHeads([]); }} className="w-full pt-1 text-[11px] font-bold text-blue-700 hover:underline">Clear selection</button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1257,6 +1346,7 @@ export default function Dashboard({
               <Download className="h-4 w-4" />
               Export (CSV)
             </button>
+            <button onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 cursor-pointer shrink-0" title="Print or save as PDF"><FileText className="h-4 w-4" />Export (PDF)</button>
           </div>
         </div>
 
@@ -1281,7 +1371,7 @@ export default function Dashboard({
                       <th className="py-2.5 px-3 text-right">Balance (₹)</th>
                       <th className="py-2.5 px-3">Payment Mode</th>
                       <th className="py-2.5 px-3">Remarks</th>
-                      {(currentUser.role === "Treasurer" || currentUser.role === "Admin") && (
+                      {false && (
                         <th className="py-2.5 px-3 text-center">Actions</th>
                       )}
                     </tr>
@@ -1316,7 +1406,7 @@ export default function Dashboard({
                               </span>
                             </td>
                             <td className="py-3 px-3 text-slate-500 max-w-xs truncate" title={tx.remarks || tx.description}>{tx.remarks || tx.description || "—"}</td>
-                            {(currentUser.role === "Treasurer" || currentUser.role === "Admin") && (
+                            {false && (
                               <td className="py-3 px-3 text-center">
                                 {isEditable ? (
                                   <div className="flex items-center justify-center gap-1">
@@ -1374,7 +1464,7 @@ export default function Dashboard({
                       <th className="py-2.5 px-3">Payment Mode</th>
                       <th className="py-2.5 px-3">Member ID</th>
                       <th className="py-2.5 px-3">Remarks</th>
-                      {(currentUser.role === "Treasurer" || currentUser.role === "Admin") && (
+                      {false && (
                         <th className="py-2.5 px-3 text-center">Actions</th>
                       )}
                     </tr>
@@ -1410,7 +1500,7 @@ export default function Dashboard({
                             </td>
                             <td className="py-3 px-3 font-mono font-bold text-slate-700">{tx.paidByMemberId || "—"}</td>
                             <td className="py-3 px-3 text-slate-500 max-w-xs truncate" title={tx.remarks || tx.description}>{tx.remarks || tx.description || "—"}</td>
-                            {(currentUser.role === "Treasurer" || currentUser.role === "Admin") && (
+                            {false && (
                               <td className="py-3 px-3 text-center">
                                 {isEditable ? (
                                   <div className="flex items-center justify-center gap-1">
@@ -1469,7 +1559,7 @@ export default function Dashboard({
                       <th className="py-2.5 px-3 text-right">Loan Balance (₹)</th>
                       <th className="py-2.5 px-3">Target Return Date</th>
                       <th className="py-2.5 px-3">Remarks</th>
-                      {(currentUser.role === "Treasurer" || currentUser.role === "Admin") && (
+                      {false && (
                         <th className="py-2.5 px-3 text-center">Actions</th>
                       )}
                     </tr>
@@ -1514,7 +1604,7 @@ export default function Dashboard({
                             <td className="py-3 px-3 text-right font-black text-indigo-900">₹{bal.toLocaleString()}</td>
                             <td className="py-3 px-3 font-mono text-slate-600 whitespace-nowrap">{tx.loanReturnDate ? formatDateDMY(tx.loanReturnDate) : "—"}</td>
                             <td className="py-3 px-3 text-slate-500 max-w-xs truncate">{tx.remarks || "—"}</td>
-                            {(currentUser.role === "Treasurer" || currentUser.role === "Admin") && (
+                            {false && (
                               <td className="py-3 px-3 text-center">
                                 {isEditable ? (
                                   <div className="flex items-center justify-center gap-1.5">
@@ -1974,7 +2064,7 @@ export default function Dashboard({
           {activeReportTab === "raw" && (
             <div className="space-y-4">
               <div className="border border-slate-200 rounded-xl overflow-x-auto">
-                {filteredTransactions.length === 0 ? (
+                {detailedTransactions.length === 0 ? (
                   <div className="py-12 text-center text-slate-400">
                     <Layers className="h-10 w-10 mx-auto mb-2 text-slate-300" />
                     <p className="text-sm font-semibold text-slate-500">No matching entries recorded</p>
@@ -1991,13 +2081,13 @@ export default function Dashboard({
                         <th className="py-2.5 px-4">Voucher ID</th>
                         <th className="py-2.5 px-4">Remarks / Description</th>
                         <th className="py-2.5 px-4 text-right">Amount (₹)</th>
-                        {(currentUser.role === "Treasurer" || currentUser.role === "Admin") && (
+                        {false && (
                           <th className="py-2.5 px-4 text-center">Actions</th>
                         )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                      {filteredTransactions.map((tx) => {
+                      {detailedTransactions.map((tx) => {
                         const chapterName = CHAPTERS.find((c) => c.id === tx.chapterId)?.name || tx.chapterId;
                         const isEditable = currentUser.role === "Admin" || (currentUser.role === "Treasurer" && tx.chapterId === currentUser.nodeId);
                         
@@ -2021,7 +2111,7 @@ export default function Dashboard({
                             <td className="py-3.5 px-4 text-slate-600 max-w-xs truncate" title={tx.description}>{tx.description || "—"}</td>
                             <td className="py-3.5 px-4 text-right font-black text-slate-900">₹{tx.amount.toLocaleString()}</td>
                             
-                            {(currentUser.role === "Treasurer" || currentUser.role === "Admin") && (
+                            {false && (
                               <td className="py-3.5 px-4 text-center">
                                 <div className="flex items-center justify-center gap-1">
                                   {isEditable ? (

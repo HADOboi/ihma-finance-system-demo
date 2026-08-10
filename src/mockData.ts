@@ -64,8 +64,6 @@ export const DEFAULT_ACCOUNT_HEADS: AccountHead[] = [
   { id: "inc_member_ordinary", name: "Membership - ordinary", type: HeadType.Income, isSystem: true, isActive: true },
   { id: "inc_member_gold", name: "Membership - gold", type: HeadType.Income, isSystem: true, isActive: true },
   { id: "inc_member_platinum", name: "Membership - platinum", type: HeadType.Income, isSystem: true, isActive: true },
-  { id: "inc_cme_delegate", name: "CME Delegate Fees", type: HeadType.Income, isSystem: true, isActive: true },
-  { id: "inc_trust_grant", name: "Trust & Grant Income", type: HeadType.Income, isSystem: true, isActive: true },
 
   // Expense Heads
   { id: "exp_tada", name: "TA&DA", type: HeadType.Expense, isSystem: true, isActive: true },
@@ -74,8 +72,6 @@ export const DEFAULT_ACCOUNT_HEADS: AccountHead[] = [
   { id: "exp_postage", name: "Postage", type: HeadType.Expense, isSystem: true, isActive: true },
   { id: "exp_digital_media", name: "Digital media", type: HeadType.Expense, isSystem: true, isActive: true },
   { id: "exp_bank", name: "Bank expense", type: HeadType.Expense, isSystem: true, isActive: true },
-  { id: "exp_cme_venue", name: "CME Venue & Catering", type: HeadType.Expense, isSystem: true, isActive: true },
-  { id: "exp_office_maint", name: "Office Maintenance", type: HeadType.Expense, isSystem: true, isActive: true },
 ];
 
 // Predefined Users
@@ -1726,6 +1722,42 @@ export const PRELOADED_TRANSACTIONS: Transaction[] = [
     createdBy: "aluva_treasurer",
     createdAt: "2026-05-10T12:00:00Z",
   },
+  // FY 2026-27: month-by-month sample activity for richer reports and repayment tracking.
+  ...[
+    ["2026-07-12", HeadType.Income, "inc_member_gold", "Membership - Gold", 72000, "cochin", "KL-EK-CO01", "Cochin Chapter"],
+    ["2026-08-18", HeadType.Expense, "exp_meeting", "Meeting expense", 46500, "cochin", "KL-EK-CO01", "Cochin Chapter"],
+    ["2026-09-09", HeadType.Income, "inc_donations", "Donations", 56000, "aluva", "KL-EK-AL02", "Aluva Chapter"],
+    ["2026-10-21", HeadType.Expense, "exp_printing", "Printing", 18200, "aluva", "KL-EK-AL02", "Aluva Chapter"],
+    ["2026-11-14", HeadType.Income, "inc_coaching", "Coaching programs", 38500, "cochin", "KL-EK-CO01", "Cochin Chapter"],
+    ["2026-12-16", HeadType.Expense, "exp_digital_media", "Digital media", 24500, "cochin", "KL-EK-CO01", "Cochin Chapter"],
+    ["2027-01-11", HeadType.Income, "inc_sponsorship", "Sponsorship", 95000, "aluva", "KL-EK-AL02", "Aluva Chapter"],
+    ["2027-02-20", HeadType.Expense, "exp_meeting", "Meeting expense", 12800, "cochin", "KL-EK-CO01", "Cochin Chapter"],
+    ["2027-03-15", HeadType.Income, "inc_bank", "Bank income", 21500, "cochin", "KL-EK-CO01", "Cochin Chapter"],
+  ].map(([date, type, headId, headName, amount, chapterId, chapterIdInput, chapterNameInput], index) => ({
+    id: `tx_2026_27_${index + 1}`,
+    slNo: 100 + index,
+    date: date as string,
+    type: type as HeadType,
+    headId: headId as string,
+    headName: headName as string,
+    amount: amount as number,
+    voucherNumber: `FY26-${String(index + 1).padStart(3, "0")}`,
+    chapterId: chapterId as string,
+    chapterIdInput: chapterIdInput as string,
+    chapterNameInput: chapterNameInput as string,
+    paymentMode: index % 2 === 0 ? "Bank" as const : "Cash" as const,
+    paidAmount: amount as number,
+    createdBy: chapterId === "cochin" ? "cochin_treasurer" : "aluva_treasurer",
+    createdAt: `${date as string}T10:00:00Z`,
+  })),
+  {
+    id: "tx_loan_2026_27_cochin", slNo: 110, date: "2026-10-05", type: HeadType.Loan, headId: "loan", headName: "Loan", amount: 100000,
+    voucherNumber: "LN-26-101", chapterId: "cochin", chapterIdInput: "KL-EK-CO01", chapterNameInput: "Cochin Chapter", paidToCategory: "chapter", paidTo: "Cochin Chapter", paidToId: "KL-EK-CO01", paidToName: "Cochin Chapter", particulars: "CME equipment advance", paymentMode: "Bank", amountReturned: 40000, loanBalance: 60000, loanReturnDate: "2027-03-31", loanReturnedDate: "2027-01-25", repaymentPaymentMode: "Bank", repaymentDate: "2027-01-25", remarks: "First repayment received", createdBy: "cochin_treasurer", createdAt: "2026-10-05T10:00:00Z"
+  },
+  {
+    id: "tx_loan_2026_27_aluva", slNo: 111, date: "2026-12-08", type: HeadType.Loan, headId: "loan", headName: "Loan", amount: 75000,
+    voucherNumber: "LN-26-102", chapterId: "aluva", chapterIdInput: "KL-EK-AL02", chapterNameInput: "Aluva Chapter", paidToCategory: "chapter", paidTo: "Aluva Chapter", paidToId: "KL-EK-AL02", paidToName: "Aluva Chapter", particulars: "Chapter office repairs", paymentMode: "Cash", amountReturned: 25000, loanBalance: 50000, loanReturnDate: "2027-04-30", loanReturnedDate: "2027-03-10", repaymentPaymentMode: "Cash", repaymentDate: "2027-03-10", remarks: "Partial repayment received", createdBy: "aluva_treasurer", createdAt: "2026-12-08T10:00:00Z"
+  },
 ];
 
 // Database Management Helpers
@@ -1770,10 +1802,33 @@ export function loadDatabase() {
     };
   }
 
+  // Add newly introduced demo records without replacing any locally entered data.
+  // Remove the two retired seeded expense heads and their old sample entries.
+  const retiredHeadIds = new Set([
+    "exp_cme_venue",
+    "exp_office_maint",
+    "inc_cme_delegate",
+    "inc_trust_grant",
+  ]);
+  const savedHeads = JSON.parse(accountHeads) as AccountHead[];
+  const savedTransactions = JSON.parse(transactions) as Transaction[];
+  const mergedHeads = [
+    ...DEFAULT_ACCOUNT_HEADS,
+    ...savedHeads.filter((head) => !retiredHeadIds.has(head.id) && !DEFAULT_ACCOUNT_HEADS.some((defaultHead) => defaultHead.id === head.id)),
+  ];
+  const seedTransactions = PRELOADED_TRANSACTIONS.filter((tx) => !retiredHeadIds.has(tx.headId));
+  const mergedTransactions = [
+    ...seedTransactions.filter((seed) => !savedTransactions.some((saved) => saved.id === seed.id)),
+    ...savedTransactions.filter((tx) => !retiredHeadIds.has(tx.headId)),
+  ];
+
+  localStorage.setItem("ihma_account_heads", JSON.stringify(mergedHeads));
+  localStorage.setItem("ihma_transactions", JSON.stringify(mergedTransactions));
+
   return {
     users: JSON.parse(users),
-    accountHeads: JSON.parse(accountHeads),
-    transactions: JSON.parse(transactions),
+    accountHeads: mergedHeads,
+    transactions: mergedTransactions,
     assets: JSON.parse(assets),
     bankBalances: JSON.parse(bankBalances),
     chapterDirectory: JSON.parse(chapterDirectory),

@@ -432,8 +432,7 @@ export default function TreasurerEntry({
     if (activeWizard === "member") {
       return [
         { id: "member_basic", title: "Doctor's Name & Demographics", sub: "Doctor name, gender, blood group & date of birth." },
-        { id: "member_qualifications", title: "Academic Degrees & Qualifications", sub: "Add degrees, university, institution & passing year." },
-        { id: "member_council", title: "Medical Council & Registration", sub: "Council state, council name & registration number." },
+        { id: "member_qualifications", title: "Academic Degrees & Qualifications", sub: "Add each degree with its council and registration details." },
         { id: "member_practice", title: "Clinical Specialty & Address", sub: "Clinical practice specialty, clinic & home address." },
         { id: "member_contact", title: "Contact Information", sub: "Mobile number, WhatsApp, email, and clinic contact numbers." },
         { id: "review", title: "Review & Register Doctor Profile", sub: "Audit and verify doctor profile before saving to directory." },
@@ -521,7 +520,6 @@ export default function TreasurerEntry({
       const hasQualStr = !!formData.qualification?.trim();
       return hasList || hasQuals || hasQualStr;
     }
-    if (sId === "member_council") return true;
     if (sId === "member_practice") return true;
     if (sId === "member_contact") return !!formData.mobileNumber?.trim();
 
@@ -3183,7 +3181,35 @@ export default function TreasurerEntry({
 
                             <div>
                               <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                                Council Reg # (Optional)
+                                Medical Council
+                              </label>
+                              <select
+                                value={formData.tempMedicalCouncilName || ""}
+                                onChange={(e) => setFormData({ ...formData, tempMedicalCouncilName: e.target.value })}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white"
+                              >
+                                <option value="">-- Select Council --</option>
+                                {MEDICAL_COUNCIL_OPTIONS.map((mc) => <option key={mc} value={mc}>{mc}</option>)}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                Council State
+                              </label>
+                              <select
+                                value={formData.tempMedicalCouncilState || ""}
+                                onChange={(e) => setFormData({ ...formData, tempMedicalCouncilState: e.target.value })}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white"
+                              >
+                                <option value="">-- Select State --</option>
+                                {INDIAN_STATES.map((state) => <option key={state} value={state}>{state}</option>)}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                Council Registration #
                               </label>
                               <input
                                 type="text"
@@ -3205,6 +3231,8 @@ export default function TreasurerEntry({
                                 institution: formData.tempInstitution?.trim() || undefined,
                                 university: formData.tempUniversity?.trim() || undefined,
                                 yearOfPassing: formData.tempYearOfPassing?.trim() || undefined,
+                                medicalCouncilName: formData.tempMedicalCouncilName || undefined,
+                                medicalCouncilState: formData.tempMedicalCouncilState || undefined,
                                 registrationNumber: formData.tempRegistrationNumber?.trim() || undefined,
                               };
                               const currentList = formData.qualificationsList || [];
@@ -3216,6 +3244,8 @@ export default function TreasurerEntry({
                                 tempInstitution: "",
                                 tempUniversity: "",
                                 tempYearOfPassing: "",
+                                tempMedicalCouncilName: "",
+                                tempMedicalCouncilState: "",
                                 tempRegistrationNumber: "",
                               });
                             }}
@@ -3267,7 +3297,7 @@ export default function TreasurerEntry({
 
                                     {q.registrationNumber && (
                                       <p className="text-[11px] text-teal-800 font-mono">
-                                        Reg #: {q.registrationNumber}
+                                        {q.medicalCouncilName && `${q.medicalCouncilName}${q.medicalCouncilState ? ` (${q.medicalCouncilState})` : ""} • `}Reg #: {q.registrationNumber}
                                       </p>
                                     )}
                                   </div>
@@ -3291,61 +3321,7 @@ export default function TreasurerEntry({
                       </div>
                     )}
 
-                    {/* Step 3: Medical Council & Registration */}
-                    {currentStepConfig.id === "member_council" && (
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                            Medical Council Name
-                          </label>
-                          <select
-                            value={formData.tempMedicalCouncilName || ""}
-                            onChange={(e) => setFormData({ ...formData, tempMedicalCouncilName: e.target.value })}
-                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-semibold text-slate-900"
-                          >
-                            <option value="">-- Select Medical Council --</option>
-                            {MEDICAL_COUNCIL_OPTIONS.map((mc) => (
-                              <option key={mc} value={mc}>
-                                {mc}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                            Medical Council State
-                          </label>
-                          <select
-                            value={formData.tempMedicalCouncilState || ""}
-                            onChange={(e) => setFormData({ ...formData, tempMedicalCouncilState: e.target.value })}
-                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-semibold text-slate-900"
-                          >
-                            <option value="">-- Select Council State --</option>
-                            {INDIAN_STATES.map((st) => (
-                              <option key={st} value={st}>
-                                {st}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                            Primary Medical Registration Number
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. TCMC/HOM/89420"
-                            value={formData.tempRegistrationNumber || ""}
-                            onChange={(e) => setFormData({ ...formData, tempRegistrationNumber: e.target.value })}
-                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-mono font-bold text-slate-900"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Step 4: Clinical Specialty & Address */}
+                    {/* Clinical Specialty & Address */}
                     {currentStepConfig.id === "member_practice" && (
                       <div className="space-y-4">
                         <div>
@@ -3363,11 +3339,11 @@ export default function TreasurerEntry({
 
                         <div>
                           <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                            Years of Active Clinical Practice
+                            Practice Start Year
                           </label>
                           <input
-                            type="text"
-                            placeholder="e.g. 15 Years"
+                            type="number"
+                            placeholder="e.g. 2012"
                             value={formData.yearsOfPractice || ""}
                             onChange={(e) => setFormData({ ...formData, yearsOfPractice: e.target.value })}
                             className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-medium text-slate-900"
