@@ -18,6 +18,7 @@ import {
 } from "../types";
 import { CHAPTERS } from "../mockData";
 import { formatDateDMY, formatINR, ensureDoctorPrefix } from "../utils/formatters";
+import { getFinancialUnitName, getUserFinancialUnitId } from "../utils/financialUnits";
 import {
   ArrowLeft,
   Check,
@@ -52,6 +53,7 @@ interface TreasurerEntryProps {
   membersList?: Member[];
   chapterDirectory?: ChapterMaster[];
   transactions?: Transaction[];
+  assetsList?: Asset[];
   onAddTransaction: (tx: Omit<Transaction, "id" | "createdBy" | "createdAt" | "chapterId" | "headName">) => void;
   onUpdateTransaction: (tx: Transaction) => void;
   editingTransaction: Transaction | null;
@@ -70,6 +72,7 @@ export default function TreasurerEntry({
   membersList = [],
   chapterDirectory = [],
   transactions = [],
+  assetsList = [],
   onAddTransaction,
   onUpdateTransaction,
   editingTransaction,
@@ -80,9 +83,8 @@ export default function TreasurerEntry({
   onOpenReports,
 }: TreasurerEntryProps) {
   // Determine chapter details
-  const userChapter = CHAPTERS.find((c) => c.id === currentUser.nodeId);
-  const defaultChapterId = currentUser.nodeId && currentUser.nodeId !== "cochin" ? currentUser.nodeId : "KL-EK-CO01";
-  const defaultChapterName = userChapter ? userChapter.name : "Cochin Chapter";
+  const defaultChapterId = getUserFinancialUnitId(currentUser);
+  const defaultChapterName = getFinancialUnitName(defaultChapterId);
 
   // Active Wizard Mode
   const [activeWizard, setActiveWizard] = useState<EntryWizardType>(null);
@@ -101,6 +103,10 @@ export default function TreasurerEntry({
   const [formData, setFormData] = useState<any>({});
   const [memberSearchTerm, setMemberSearchTerm] = useState<string>("");
   const [qualSearchTerm, setQualSearchTerm] = useState<string>("");
+
+  useEffect(() => {
+    if (activeWizard) window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [activeWizard]);
 
   const DEGREE_OPTIONS = [
     "BHMS",
@@ -214,6 +220,44 @@ export default function TreasurerEntry({
     return "₹" + num.toLocaleString("en-IN");
   };
 
+  // Capital asset categories offered in the asset register dropdown
+  const ASSET_CATEGORIES = [
+    "Electronics",
+    "Office Electronics",
+    "Furniture",
+    "Medical Equipment",
+    "Electrical Equipment",
+    "Appliances",
+    "Real Estate",
+    "Vehicles",
+    "Books & Library",
+    "Others",
+  ];
+
+  // Next sequential asset number, unique across the existing register (AST-[#009] style)
+  const generateAssetNumber = () => {
+    const highest = assetsList.reduce((max, a) => {
+      const digits = String(a.assetId || "").match(/(\d+)/);
+      const n = digits ? parseInt(digits[1], 10) : 0;
+      return n > max ? n : max;
+    }, 0);
+    return `AST-[#${String(highest + 1).padStart(3, "0")}]`;
+  };
+
+  // Total value = unit price x number of items
+  const totalValueOf = (data: any) =>
+    (Number(data?.assetValue) || 0) * (Number(data?.quantity) || 0);
+
+  // Straight-line annual depreciation: total value spread evenly across the asset's life
+  const depreciationAmountOf = (data: any) => {
+    const life = Number(data?.assetLife) || 0;
+    if (life <= 0) return 0;
+    return Math.round(totalValueOf(data) / life);
+  };
+
+  // Written-down value after one year of depreciation
+  const netAmountOf = (data: any) => totalValueOf(data) - depreciationAmountOf(data);
+
   // Reset Wizard State
   const handleStartWizard = (type: EntryWizardType) => {
     setActiveWizard(type);
@@ -313,22 +357,37 @@ export default function TreasurerEntry({
       setQualSearchTerm("");
     } else if (type === "asset") {
       setFormData({
+        date: todayStr,
         assetName: "",
         category: null,
         chapterId: defaultChapterId,
         chapterName: defaultChapterName,
-        purchaseDate: todayStr,
+        assetNumber: generateAssetNumber(),
+        purchaseDate: "", // NO PREFILL
+        quantity: 1,
         assetValue: 0,
-        assetLife: 5,
+        paymentMode: null, // STRICT NO-DEFAULT RULE
+        assetLife: 0,
         custodianName: "", // NO PREFILL
+        remarks: "",
       });
     } else if (type === "bank_balance") {
       setFormData({
-        amountType: null, // FD vs Bank Balance
+        amountType: null, // STRICT NO-DEFAULT RULE — FD or Bank interest must be tapped
         chapterId: defaultChapterId,
         chapterName: defaultChapterName,
+        depositedBy: "", // NO PREFILL
         amount: 0,
+        interestAmount: 0,
+        remarks: "",
         date: todayStr,
+        maturityDate: "",
+        bankName: "",
+        bankBranch: "",
+        bankAccountNumber: "",
+        bankAddress: "",
+        bankContactNumber: "",
+        voucherNumber: `RV-${Math.floor(100 + Math.random() * 900)}`,
       });
     }
   };
@@ -441,17 +500,42 @@ export default function TreasurerEntry({
 
     if (activeWizard === "asset") {
       return [
-        { id: "asset_info", title: "Asset Category & Name", sub: "Identify physical capital asset." },
-        { id: "value_custodian", title: "Asset Value & Custodian", sub: "Set estimated value and responsible person." },
-        { id: "review", title: "Review Asset Entry", sub: "Confirm asset register record." },
+        { id: "asset_date", title: "Select Entry Date", sub: "Date this asset is being recorded in the register." },
+        { id: "asset_name", title: "Asset Name", sub: "Identify the physical capital asset." },
+        { id: "asset_purchase_date", title: "Asset Purchase Date", sub: "Date the asset was originally purchased." },
+        { id: "asset_quantity", title: "Number of Items", sub: "How many identical items were purchased." },
+        { id: "asset_value", title: "Asset Value", sub: "Price of a single item; total is auto-calculated." },
+        { id: "asset_payment_mode", title: "Mode of Payment", sub: "How this asset was paid for." },
+        { id: "asset_remarks", title: "Remarks / Notes", sub: "Optional notes for this asset record." },
+        { id: "asset_category", title: "Asset Category", sub: "Select the capital asset category." },
+        { id: "asset_life", title: "Asset Life", sub: "Useful life in years; drives annual depreciation." },
+        { id: "asset_custodian", title: "Custodian Name", sub: "Person responsible for this asset." },
+        { id: "asset_depreciation", title: "Depreciation Summary", sub: "Straight-line depreciation, auto-calculated." },
+        { id: "review", title: "Review & Save Asset Entry", sub: "Confirm asset register record before saving." },
       ];
     }
 
     if (activeWizard === "bank_balance") {
+      // The amount type splits the flow: a fixed deposit collects the deposit and
+      // bank details, while bank interest only needs the amount actually received.
+      if (formData.amountType === "Bank Interest") {
+        return [
+          { id: "fd_date", title: "Select Date", sub: "Date the interest was credited by the bank." },
+          { id: "fd_amount_type", title: "Amount Type", sub: "Fixed deposit or bank interest received." },
+          { id: "fd_interest_amount", title: "Interest Amount", sub: "Exact interest amount credited, as per the bank." },
+          { id: "fd_remarks", title: "Remarks / Notes", sub: "Optional notes for this interest credit." },
+          { id: "review", title: "Review & Save Bank Interest", sub: "Confirm the interest received." },
+        ];
+      }
+
       return [
-        { id: "balance_type", title: "Deposit Account Type", sub: "Select Liquid Bank Balance vs Fixed Deposit (FD)." },
-        { id: "balance_amount", title: "Account Balance", sub: "Enter closing balance in INR." },
-        { id: "review", title: "Review Balance Record", sub: "Confirm bank balance record." },
+        { id: "fd_date", title: "Select Date", sub: "Date the fixed deposit was opened." },
+        { id: "fd_amount_type", title: "Amount Type", sub: "Fixed deposit or bank interest received." },
+        { id: "balance_amount", title: "FD Amount", sub: "Principal deposited in INR." },
+        { id: "fd_maturity_date", title: "FD Maturity Date", sub: "Date on which this fixed deposit matures." },
+        { id: "fd_bank_details", title: "Bank Details", sub: "Account number, bank, branch, branch address and contact number." },
+        { id: "fd_remarks", title: "Remarks / Notes", sub: "Optional notes for this deposit." },
+        { id: "review", title: "Review & Save FD Entry", sub: "Confirm fixed deposit record." },
       ];
     }
 
@@ -523,11 +607,25 @@ export default function TreasurerEntry({
     if (sId === "member_practice") return true;
     if (sId === "member_contact") return !!formData.mobileNumber?.trim();
 
-    if (sId === "asset_info") return !!formData.category && !!formData.assetName?.trim();
-    if (sId === "value_custodian") return formData.assetValue > 0 && !!formData.custodianName?.trim();
+    if (sId === "asset_date") return !!formData.date;
+    if (sId === "asset_name") return !!formData.assetName?.trim();
+    if (sId === "asset_purchase_date") return !!formData.purchaseDate;
+    if (sId === "asset_quantity") return Number(formData.quantity) > 0;
+    if (sId === "asset_value") return Number(formData.assetValue) > 0;
+    if (sId === "asset_payment_mode") return !!formData.paymentMode; // STRICT NO-DEFAULT RULE
+    if (sId === "asset_category") return !!formData.category;
+    if (sId === "asset_life") return Number(formData.assetLife) > 0;
+    if (sId === "asset_custodian") return !!formData.custodianName?.trim();
+    if (sId === "asset_depreciation") return true; // Fully auto-calculated
+    if (sId === "asset_remarks") return true; // Optional
 
-    if (sId === "balance_type") return !!formData.amountType;
+    if (sId === "fd_date") return !!formData.date;
+    if (sId === "fd_amount_type") return !!formData.amountType; // STRICT NO-DEFAULT RULE
     if (sId === "balance_amount") return formData.amount > 0;
+    if (sId === "fd_interest_amount") return Number(formData.interestAmount) > 0;
+    if (sId === "fd_remarks") return true; // Optional
+    if (sId === "fd_maturity_date") return !!formData.maturityDate;
+    if (sId === "fd_bank_details") return !!formData.bankName?.trim();
 
     if (sId === "review") {
       if (activeWizard === "income") {
@@ -692,24 +790,61 @@ export default function TreasurerEntry({
       });
     } else if (activeWizard === "asset" && onAddAsset) {
       onAddAsset({
-        date: todayStr,
+        date: formData.date || todayStr,
         chapterIdInput: formData.chapterId,
         chapterNameInput: formData.chapterName,
-        assetId: `AST-${Math.floor(100 + Math.random() * 900)}`,
+        assetId: formData.assetNumber || generateAssetNumber(),
         assetName: formData.assetName,
         purchaseDate: formData.purchaseDate,
+        quantity: Number(formData.quantity) || 1,
         assetValue: Number(formData.assetValue),
+        totalValue: totalValueOf(formData),
+        paymentMode: formData.paymentMode || "Cash",
         category: formData.category || "General Asset",
-        assetLife: Number(formData.assetLife) || 5,
+        assetLife: Number(formData.assetLife) || 0,
         custodianName: formData.custodianName,
+        depreciationAmount: depreciationAmountOf(formData),
+        netAmount: netAmountOf(formData),
+        remarks: formData.remarks?.trim() || undefined,
+      });
+    } else if (activeWizard === "bank_balance" && formData.amountType === "Bank Interest") {
+      // Bank interest is plain income — the treasurer types the exact amount the bank
+      // credited, and it posts straight to the Bank income head so every report picks
+      // it up. Nothing is added to the FD register.
+      const interestAmount = Number(formData.interestAmount) || 0;
+      onAddTransaction({
+        date: formData.date || todayStr,
+        type: HeadType.Income,
+        headId: "inc_bank",
+        amount: interestAmount,
+        voucherNumber: formData.voucherNumber,
+        chapterIdInput: formData.chapterId || defaultChapterId,
+        chapterNameInput: formData.chapterName || defaultChapterName,
+        collectedBy: currentUser.name,
+        paidBy: "Bank (Interest)",
+        offeredAmount: interestAmount,
+        paidAmount: interestAmount,
+        balanceAmount: 0,
+        paymentMode: "Bank",
+        isFdInterest: true,
+        remarks: formData.remarks?.trim() || undefined,
+        description: formData.remarks?.trim() || "Bank / FD interest received",
       });
     } else if (activeWizard === "bank_balance" && onAddBankBalance) {
       onAddBankBalance({
         date: formData.date || todayStr,
         chapterIdInput: formData.chapterId,
         chapterNameInput: formData.chapterName,
-        amountType: formData.amountType || "Bank Balance",
+        amountType: "FD",
         amount: Number(formData.amount),
+        depositedBy: formData.depositedBy?.trim() || undefined,
+        maturityDate: formData.maturityDate || undefined,
+        bankName: formData.bankName?.trim() || undefined,
+        bankBranch: formData.bankBranch?.trim() || undefined,
+        bankAccountNumber: formData.bankAccountNumber?.trim() || undefined,
+        bankAddress: formData.bankAddress?.trim() || undefined,
+        bankContactNumber: formData.bankContactNumber?.trim() || undefined,
+        remarks: formData.remarks?.trim() || undefined,
       });
     }
 
@@ -786,7 +921,7 @@ export default function TreasurerEntry({
 
           {/* Action Tap Cards Grid - 2 cols on mobile, 3 cols on desktop */}
           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
-            {/* Primary Highlight Card: View Reports & Summaries */}
+            {/* Primary Highlight Card: Financial Reports */}
             <button
               onClick={() => onOpenReports?.()}
               id="view-reports-summaries-button"
@@ -798,13 +933,8 @@ export default function TreasurerEntry({
                     📊
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="bg-teal-400/20 text-teal-200 border border-teal-400/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                        Financial Reports
-                      </span>
-                    </div>
-                    <h3 className="font-bold text-base sm:text-lg text-white font-display mt-0.5">
-                      View reports & summaries
+                    <h3 className="font-bold text-base sm:text-lg text-white font-display">
+                      Financial Reports
                     </h3>
                   </div>
                 </div>
@@ -910,21 +1040,21 @@ export default function TreasurerEntry({
               </div>
             </button>
 
-            {/* 6. Bank Balance / FD */}
+            {/* 6. Fixed Deposit (FD) */}
             <button
               onClick={() => handleStartWizard("bank_balance")}
               className="group bg-white p-5 rounded-2xl border border-purple-100 shadow-xs hover:shadow-md hover:border-purple-500 transition-all text-left flex flex-col justify-between cursor-pointer"
             >
               <div>
                 <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-800 flex items-center justify-center text-2xl mb-3 group-hover:scale-105 transition-transform">
-                  🏦
+                  📜
                 </div>
                 <h3 className="font-bold text-base text-slate-900 group-hover:text-purple-800 transition-colors">
-                  Log FD & Bank Balance
+                  Log Fixed Deposit
                 </h3>
               </div>
               <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-purple-700">
-                <span>Add Bank Balance</span>
+                <span>Add FD</span>
                 <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
               </div>
             </button>
@@ -1591,7 +1721,7 @@ export default function TreasurerEntry({
                     {activeWizard === "loan" && "Log Loan / Disbursement"}
                     {activeWizard === "member" && "Register Member Profile"}
                     {activeWizard === "asset" && "Register Chapter Asset"}
-                    {activeWizard === "bank_balance" && "Log Bank Balance / FD"}
+                    {activeWizard === "bank_balance" && "Log Fixed Deposit (FD)"}
                   </h3>
                   <p className="text-[10px] text-slate-500 font-medium truncate">
                     {defaultChapterName}
@@ -3608,122 +3738,695 @@ export default function TreasurerEntry({
                 {/* ---------------- ASSET WIZARD STEPS ---------------- */}
                 {activeWizard === "asset" && (
                   <>
-                    {currentStepConfig.id === "asset_info" && (
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">Asset Name *</label>
+                    {/* Step 1: Entry Date */}
+                    {currentStepConfig.id === "asset_date" && (
+                      <div className="space-y-4">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Asset Entry Date *
+                        </label>
+                        <div className="flex items-center gap-3">
                           <input
-                            type="text"
-                            placeholder="e.g. Projector, Office Chair, Laptop"
-                            value={formData.assetName || ""}
-                            onChange={(e) => setFormData({ ...formData, assetName: e.target.value })}
-                            className="w-full p-2.5 border border-slate-300 rounded-xl text-xs"
+                            type="date"
+                            max={new Date().toISOString().slice(0, 10)}
+                            value={formData.date || new Date().toISOString().slice(0, 10)}
+                            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                            className="flex-1 px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
                           />
+                          <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, date: new Date().toISOString().slice(0, 10) })}
+                            className="px-4 py-3 bg-sky-50 text-sky-800 text-xs font-bold rounded-xl border border-sky-200 hover:bg-sky-100 cursor-pointer"
+                          >
+                            Set Today
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          Date this asset is being recorded into the chapter register.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Step 2: Asset Name */}
+                    {currentStepConfig.id === "asset_name" && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Asset Name *
+                        </label>
+                        <input
+                          type="text"
+                          autoFocus
+                          placeholder="e.g. Projector, Office Chair, Laptop"
+                          value={formData.assetName || ""}
+                          onChange={(e) => setFormData({ ...formData, assetName: e.target.value })}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                        />
+                        <p className="text-[11px] text-slate-500">
+                          Describe the physical asset clearly enough for an auditor to identify it.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Step 3: Purchase Date */}
+                    {currentStepConfig.id === "asset_purchase_date" && (
+                      <div className="space-y-4">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Asset Purchase Date *
+                        </label>
+                        <input
+                          type="date"
+                          max={new Date().toISOString().slice(0, 10)}
+                          value={formData.purchaseDate || ""}
+                          onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                        />
+                        <p className="text-[11px] text-slate-500">
+                          Original date of purchase as per the invoice. No prefilled default.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Step 4: Number of Items */}
+                    {currentStepConfig.id === "asset_quantity" && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Number of Items *
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          autoFocus
+                          value={formData.quantity || ""}
+                          onChange={(e) => setFormData({ ...formData, quantity: Number(e.target.value) })}
+                          className="w-full text-2xl font-bold px-4 py-3 border border-slate-300 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                          placeholder="1"
+                        />
+                        <p className="text-[11px] text-slate-500">
+                          How many identical items were purchased, e.g. 3 tables. Enter 1 for a single item.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Step 5: Asset Value (per item) */}
+                    {currentStepConfig.id === "asset_value" && (
+                      <div className="space-y-4">
+                        <div className="space-y-3">
+                          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            Asset Value — Price Per Item (₹) *
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-slate-400 pointer-events-none">
+                              ₹
+                            </span>
+                            <input
+                              type="number"
+                              min="1"
+                              autoFocus
+                              value={formData.assetValue || ""}
+                              onChange={(e) => setFormData({ ...formData, assetValue: Number(e.target.value) })}
+                              className="w-full text-2xl font-bold pl-10 pr-4 py-3 border border-slate-300 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                              placeholder="0"
+                            />
+                          </div>
                         </div>
 
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-2">Category</label>
-                          <div className="grid grid-cols-2 gap-2">
-                            {["Electronics", "Furniture", "Medical Equipment", "Real Estate"].map((cat) => (
-                              <button
-                                key={cat}
-                                type="button"
-                                onClick={() => setFormData({ ...formData, category: cat })}
-                                className={`p-3 rounded-xl border text-xs font-bold ${
-                                  formData.category === cat ? "bg-[#0F6E5D] text-white border-[#0F6E5D]" : "bg-white border-slate-200"
-                                }`}
-                              >
-                                {cat}
-                              </button>
-                            ))}
+                        {/* Auto-calculated total */}
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs">
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Price Per Item:</span>
+                            <span className="font-bold text-slate-900">{formatINR(formData.assetValue)}</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Number of Items:</span>
+                            <span className="font-bold text-slate-900">{Number(formData.quantity) || 0}</span>
+                          </div>
+                          <div className="flex justify-between py-1.5">
+                            <span className="text-slate-500 font-semibold">
+                              Total Value
+                              <span className="text-[10px] text-slate-400 font-medium block">Auto-calculated</span>
+                            </span>
+                            <span className="font-black text-sky-800 text-sm">{formatINR(totalValueOf(formData))}</span>
                           </div>
                         </div>
                       </div>
                     )}
 
-                    {currentStepConfig.id === "value_custodian" && (
+                    {/* Step 6: Mode of Payment */}
+                    {currentStepConfig.id === "asset_payment_mode" && (
                       <div className="space-y-3">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">Asset Value (₹) *</label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={formData.assetValue || ""}
-                            onChange={(e) => setFormData({ ...formData, assetValue: Number(e.target.value) })}
-                            className="w-full p-2.5 border border-slate-300 rounded-xl text-xs"
-                            placeholder="0"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">Custodian Name *</label>
-                          <input
-                            type="text"
-                            value={formData.custodianName || ""}
-                            onChange={(e) => setFormData({ ...formData, custodianName: e.target.value })}
-                            className="w-full p-2.5 border border-slate-300 rounded-xl text-xs"
-                          />
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Mode of Payment *
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div
+                            onClick={() => setFormData({ ...formData, paymentMode: "Cash" })}
+                            className={`p-5 rounded-2xl border-2 cursor-pointer text-center transition-all ${
+                              formData.paymentMode === "Cash"
+                                ? "border-sky-600 bg-sky-50"
+                                : "border-slate-200 hover:border-slate-300"
+                            }`}
+                          >
+                            <div className="text-3xl">💵</div>
+                            <h4 className="font-bold text-sm mt-1">Cash</h4>
+                            <p className="text-xs text-slate-500">Paid from chapter cash in hand.</p>
+                          </div>
+
+                          <div
+                            onClick={() => setFormData({ ...formData, paymentMode: "Bank" })}
+                            className={`p-5 rounded-2xl border-2 cursor-pointer text-center transition-all ${
+                              formData.paymentMode === "Bank"
+                                ? "border-sky-600 bg-sky-50"
+                                : "border-slate-200 hover:border-slate-300"
+                            }`}
+                          >
+                            <div className="text-3xl">🏦</div>
+                            <h4 className="font-bold text-sm mt-1">Bank</h4>
+                            <p className="text-xs text-slate-500">Paid by cheque, transfer or UPI.</p>
+                          </div>
                         </div>
                       </div>
                     )}
 
+                    {/* Step 7: Remarks */}
+                    {currentStepConfig.id === "asset_remarks" && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Remarks / Notes (Blank Optional)
+                        </label>
+                        <textarea
+                          rows={3}
+                          placeholder="Optional notes or remarks regarding this asset..."
+                          value={formData.remarks || ""}
+                          onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                        />
+                      </div>
+                    )}
+
+                    {/* Step 8: Category */}
+                    {currentStepConfig.id === "asset_category" && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Asset Category *
+                        </label>
+                        <select
+                          value={formData.category || ""}
+                          onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500 cursor-pointer"
+                        >
+                          <option value="" disabled>
+                            Select asset category...
+                          </option>
+                          {ASSET_CATEGORIES.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[11px] text-slate-500">
+                          Category drives how the asset is grouped in the audit register.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Step 9: Asset Life */}
+                    {currentStepConfig.id === "asset_life" && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Asset Life (Years) *
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          autoFocus
+                          value={formData.assetLife || ""}
+                          onChange={(e) => setFormData({ ...formData, assetLife: Number(e.target.value) })}
+                          className="w-full text-2xl font-bold px-4 py-3 border border-slate-300 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                          placeholder="0"
+                        />
+                        <p className="text-[11px] text-slate-500">
+                          Useful life of this asset in years. Annual depreciation is calculated from this.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Step 10: Custodian */}
+                    {currentStepConfig.id === "asset_custodian" && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Custodian Name *
+                        </label>
+                        <input
+                          type="text"
+                          autoFocus
+                          placeholder="e.g. Dr. Basheer"
+                          value={formData.custodianName || ""}
+                          onChange={(e) => setFormData({ ...formData, custodianName: e.target.value })}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                        />
+                        <p className="text-[11px] text-slate-500">
+                          Office bearer personally responsible for the custody of this asset.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Step 11: Depreciation Summary (fully auto-calculated) */}
+                    {currentStepConfig.id === "asset_depreciation" && (
+                      <div className="space-y-4">
+                        <div className="bg-sky-50 border border-sky-200 rounded-xl p-3 text-xs text-sky-900 flex items-start gap-2">
+                          <ShieldCheck className="h-4 w-4 shrink-0 text-sky-700 mt-0.5" />
+                          <span>
+                            Straight-line depreciation: the total value is written off evenly across the
+                            asset's life, so nothing needs to be typed here.
+                          </span>
+                        </div>
+
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs">
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Total Value:</span>
+                            <span className="font-bold text-slate-900">{formatINR(totalValueOf(formData))}</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Asset Life:</span>
+                            <span className="font-bold text-slate-900">{Number(formData.assetLife) || 0} Years</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">
+                              Depreciation Per Year
+                              <span className="text-[10px] text-slate-400 font-medium block">
+                                Auto: total value ÷ asset life
+                              </span>
+                            </span>
+                            <span className="font-bold text-rose-700 text-sm">
+                              {formatINR(depreciationAmountOf(formData))}
+                            </span>
+                          </div>
+                          <div className="flex justify-between py-1.5">
+                            <span className="text-slate-500 font-semibold">
+                              Net Amount
+                              <span className="text-[10px] text-slate-400 font-medium block">After 1 year</span>
+                            </span>
+                            <span className="font-black text-sky-800 text-sm">{formatINR(netAmountOf(formData))}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step 12: Review & Save */}
                     {currentStepConfig.id === "review" && (
-                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-2">
-                        <p><strong>Asset:</strong> {formData.assetName}</p>
-                        <p><strong>Category:</strong> {formData.category}</p>
-                        <p><strong>Value:</strong> {formatINR(formData.assetValue)}</p>
-                        <p><strong>Custodian:</strong> {formData.custodianName}</p>
+                      <div className="space-y-4">
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Chapter Name:</span>
+                            <span className="font-bold text-slate-900">{formData.chapterName || defaultChapterName}</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Chapter ID:</span>
+                            <span className="font-mono font-bold text-slate-900">{formData.chapterId || defaultChapterId}</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Asset Number:</span>
+                            <span className="font-mono font-bold text-amber-800">{formData.assetNumber}</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Entry Date:</span>
+                            <span className="font-bold text-slate-900">{formData.date ? formatDateDMY(formData.date) : "—"}</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Asset Name:</span>
+                            <span className="font-bold text-slate-900">{formData.assetName}</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Purchase Date:</span>
+                            <span className="font-bold text-slate-900">
+                              {formData.purchaseDate ? formatDateDMY(formData.purchaseDate) : "—"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">No. of Items:</span>
+                            <span className="font-bold text-slate-900">{Number(formData.quantity) || 0}</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Price Per Item:</span>
+                            <span className="font-bold text-slate-900">{formatINR(formData.assetValue)}</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Total Value:</span>
+                            <span className="font-bold text-slate-900">{formatINR(totalValueOf(formData))}</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Mode of Payment:</span>
+                            <span className="font-bold text-slate-900">{formData.paymentMode}</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Category:</span>
+                            <span className="font-bold text-blue-700">{formData.category}</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Asset Life:</span>
+                            <span className="font-bold text-slate-900">{formData.assetLife} Years</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Custodian:</span>
+                            <span className="font-bold text-slate-900">{formData.custodianName}</span>
+                          </div>
+                          <div className="flex justify-between py-1.5 border-b border-slate-200">
+                            <span className="text-slate-500 font-semibold">Depreciation / Year:</span>
+                            <span className="font-bold text-rose-700">{formatINR(depreciationAmountOf(formData))}</span>
+                          </div>
+                          {formData.remarks && (
+                            <div className="flex justify-between py-1.5 border-b border-slate-200">
+                              <span className="text-slate-500 font-semibold">Remarks:</span>
+                              <span className="font-medium text-slate-800 italic">{formData.remarks}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between py-1.5">
+                            <span className="text-slate-500 font-semibold">
+                              Net Amount
+                              <span className="text-[10px] text-slate-400 font-medium block">After 1 year</span>
+                            </span>
+                            <span className="font-black text-sky-800 text-sm">{formatINR(netAmountOf(formData))}</span>
+                          </div>
+                        </div>
+
+                        <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 text-xs text-amber-900 flex items-center gap-2">
+                          <ShieldCheck className="h-4 w-4 shrink-0 text-amber-700" />
+                          <span>
+                            Audit Lock: Once recorded, this asset register entry cannot be directly altered.
+                          </span>
+                        </div>
                       </div>
                     )}
                   </>
                 )}
 
-                {/* ---------------- BANK BALANCE WIZARD STEPS ---------------- */}
+                {/* ---------------- FD WIZARD STEPS ---------------- */}
                 {activeWizard === "bank_balance" && (
                   <>
-                    {currentStepConfig.id === "balance_type" && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div
-                          onClick={() => setFormData({ ...formData, amountType: "Bank Balance" })}
-                          className={`p-5 rounded-2xl border-2 cursor-pointer text-center ${
-                            formData.amountType === "Bank Balance" ? "border-[#0F6E5D] bg-[#E4F1EE]" : "border-slate-200"
-                          }`}
-                        >
-                          <div className="text-3xl">🏦</div>
-                          <h4 className="font-bold text-sm">Liquid Bank Balance</h4>
-                          <p className="text-xs text-slate-500">Operating bank savings/current balance.</p>
+                    {/* Step 1: Date */}
+                    {currentStepConfig.id === "fd_date" && (
+                      <div className="space-y-4">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Date *
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="date"
+                            max={new Date().toISOString().slice(0, 10)}
+                            value={formData.date || new Date().toISOString().slice(0, 10)}
+                            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                            className="flex-1 px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, date: new Date().toISOString().slice(0, 10) })}
+                            className="px-4 py-3 bg-purple-50 text-purple-800 text-xs font-bold rounded-xl border border-purple-200 hover:bg-purple-100 cursor-pointer"
+                          >
+                            Set Today
+                          </button>
                         </div>
-
-                        <div
-                          onClick={() => setFormData({ ...formData, amountType: "FD" })}
-                          className={`p-5 rounded-2xl border-2 cursor-pointer text-center ${
-                            formData.amountType === "FD" ? "border-[#0F6E5D] bg-[#E4F1EE]" : "border-slate-200"
-                          }`}
-                        >
-                          <div className="text-3xl">📜</div>
-                          <h4 className="font-bold text-sm">Fixed Deposit (FD)</h4>
-                          <p className="text-xs text-slate-500">Long-term fixed deposit instrument.</p>
-                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          {formData.amountType === "Bank Interest"
+                            ? "Date the bank credited this interest."
+                            : "Date the fixed deposit was opened with the bank."}
+                        </p>
                       </div>
                     )}
 
+                    {/* Step 2: Amount Type — FD or Bank Interest */}
+                    {currentStepConfig.id === "fd_amount_type" && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Amount Type *
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div
+                            onClick={() => setFormData({ ...formData, amountType: "FD" })}
+                            className={`p-5 rounded-2xl border-2 cursor-pointer text-center transition-all ${
+                              formData.amountType === "FD"
+                                ? "border-purple-600 bg-purple-50"
+                                : "border-slate-200 hover:border-slate-300"
+                            }`}
+                          >
+                            <div className="text-3xl">📜</div>
+                            <h4 className="font-bold text-sm mt-1">FD</h4>
+                            <p className="text-xs text-slate-500">New fixed deposit opened with the bank.</p>
+                          </div>
+
+                          <div
+                            onClick={() => setFormData({ ...formData, amountType: "Bank Interest" })}
+                            className={`p-5 rounded-2xl border-2 cursor-pointer text-center transition-all ${
+                              formData.amountType === "Bank Interest"
+                                ? "border-purple-600 bg-purple-50"
+                                : "border-slate-200 hover:border-slate-300"
+                            }`}
+                          >
+                            <div className="text-3xl">🏦</div>
+                            <h4 className="font-bold text-sm mt-1">Bank Interest</h4>
+                            <p className="text-xs text-slate-500">Interest credited by the bank, entered as received.</p>
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          FD records the deposit in the FD register. Bank interest is posted to the
+                          ledger as Bank income and appears in the report summary.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Step 3: FD Amount */}
                     {currentStepConfig.id === "balance_amount" && (
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">Balance Amount (₹) *</label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={formData.amount || ""}
-                          onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })}
-                          className="w-full text-2xl font-bold p-3 border border-slate-300 rounded-xl"
-                          placeholder="0"
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          FD Amount (₹) *
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-slate-400 pointer-events-none">
+                            ₹
+                          </span>
+                          <input
+                            type="number"
+                            min="1"
+                            autoFocus
+                            value={formData.amount || ""}
+                            onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })}
+                            className="w-full text-2xl font-bold pl-10 pr-4 py-3 border border-slate-300 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                            placeholder="0"
+                          />
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          Principal deposited. This is a transfer to the FD account — not an expense.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Bank Interest: exact amount received */}
+                    {currentStepConfig.id === "fd_interest_amount" && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Interest Amount (₹) *
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-slate-400 pointer-events-none">
+                            ₹
+                          </span>
+                          <input
+                            type="number"
+                            min="1"
+                            autoFocus
+                            value={formData.interestAmount || ""}
+                            onChange={(e) => setFormData({ ...formData, interestAmount: Number(e.target.value) })}
+                            className="w-full text-2xl font-bold pl-10 pr-4 py-3 border border-slate-300 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                            placeholder="0"
+                          />
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          Enter the exact interest credited as per the bank statement or passbook.
+                          It is recorded as Bank income against this chapter.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Remarks */}
+                    {currentStepConfig.id === "fd_remarks" && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Remarks / Comments (Blank Optional)
+                        </label>
+                        <textarea
+                          rows={3}
+                          placeholder={
+                            formData.amountType === "Bank Interest"
+                              ? "Optional notes, e.g. quarterly savings interest for Q1..."
+                              : "Optional notes or remarks regarding this deposit..."
+                          }
+                          value={formData.remarks || ""}
+                          onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500"
                         />
                       </div>
                     )}
 
+                    {/* FD Maturity Date */}
+                    {currentStepConfig.id === "fd_maturity_date" && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          FD Maturity Date *
+                        </label>
+                        <input
+                          type="date"
+                          min={formData.date || undefined}
+                          autoFocus
+                          value={formData.maturityDate || ""}
+                          onChange={(e) => setFormData({ ...formData, maturityDate: e.target.value })}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                        />
+                        <p className="text-[11px] text-slate-500">
+                          Enter the maturity date stated on the FD certificate or bank receipt.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Bank Details */}
+                    {currentStepConfig.id === "fd_bank_details" && (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Bank Account Number</label>
+                            <input type="text" inputMode="numeric" autoFocus placeholder="FD / linked account number" value={formData.bankAccountNumber || ""} onChange={(e) => setFormData({ ...formData, bankAccountNumber: e.target.value })} className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Bank Name *</label>
+                            <input type="text" placeholder="e.g. State Bank of India" value={formData.bankName || ""} onChange={(e) => setFormData({ ...formData, bankName: e.target.value })} className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Bank Branch</label>
+                            <input type="text" placeholder="Branch name" value={formData.bankBranch || ""} onChange={(e) => setFormData({ ...formData, bankBranch: e.target.value })} className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Bank Contact Number</label>
+                            <input type="tel" placeholder="Phone number" value={formData.bankContactNumber || ""} onChange={(e) => setFormData({ ...formData, bankContactNumber: e.target.value })} className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500" />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Bank Branch Address</label>
+                            <textarea rows={2} placeholder="Branch address" value={formData.bankAddress || ""} onChange={(e) => setFormData({ ...formData, bankAddress: e.target.value })} className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500" />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Deposited By</label>
+                            <input type="text" placeholder="e.g. Dr. Basheer" value={formData.depositedBy || ""} onChange={(e) => setFormData({ ...formData, depositedBy: e.target.value })} className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500" />
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-slate-500">Only the bank name is required; the remaining details can be completed when available.</p>
+                      </div>
+                    )}
+
+                    {/* Review & Save */}
                     {currentStepConfig.id === "review" && (
-                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-2">
-                        <p><strong>Account Type:</strong> {formData.amountType}</p>
-                        <p><strong>Balance:</strong> {formatINR(formData.amount)}</p>
+                      <div className="space-y-4">
+                        {formData.amountType === "Bank Interest" ? (
+                          <>
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
+                              <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                <span className="text-slate-500 font-semibold">Chapter Name:</span>
+                                <span className="font-bold text-slate-900">{formData.chapterName || defaultChapterName}</span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                <span className="text-slate-500 font-semibold">Chapter ID:</span>
+                                <span className="font-mono font-bold text-slate-900">{formData.chapterId || defaultChapterId}</span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                <span className="text-slate-500 font-semibold">Date:</span>
+                                <span className="font-bold text-slate-900">{formData.date ? formatDateDMY(formData.date) : "—"}</span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                <span className="text-slate-500 font-semibold">Interest Amount:</span>
+                                <span className="font-black text-teal-800 text-sm">{formatINR(Number(formData.interestAmount) || 0)}</span>
+                              </div>
+                              {formData.remarks && (
+                                <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                  <span className="text-slate-500 font-semibold">Remarks:</span>
+                                  <span className="font-medium text-slate-800 italic">{formData.remarks}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between py-1.5">
+                                <span className="text-slate-500 font-semibold">Account Head:</span>
+                                <span className="font-bold text-slate-900">Bank income</span>
+                              </div>
+                            </div>
+
+                            <div className="bg-teal-50 p-3 rounded-lg border border-teal-200 text-xs text-teal-900 flex items-center gap-2">
+                              <ShieldCheck className="h-4 w-4 shrink-0 text-teal-700" />
+                              <span>
+                                This interest amount is recorded as Bank income and appears in the Summary and Detailed report sections.
+                              </span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
+                              <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                <span className="text-slate-500 font-semibold">Chapter Name:</span>
+                                <span className="font-bold text-slate-900">{formData.chapterName || defaultChapterName}</span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                <span className="text-slate-500 font-semibold">Chapter ID:</span>
+                                <span className="font-mono font-bold text-slate-900">{formData.chapterId || defaultChapterId}</span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                <span className="text-slate-500 font-semibold">FD Date:</span>
+                                <span className="font-bold text-slate-900">{formData.date ? formatDateDMY(formData.date) : "—"}</span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                <span className="text-slate-500 font-semibold">FD Amount:</span>
+                                <span className="font-black text-purple-800 text-sm">{formatINR(formData.amount)}</span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                <span className="text-slate-500 font-semibold">Maturity Date:</span>
+                                <span className="font-bold text-slate-900">{formData.maturityDate ? formatDateDMY(formData.maturityDate) : "—"}</span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                <span className="text-slate-500 font-semibold">Bank Account No.:</span>
+                                <span className="font-mono font-bold text-slate-900">{formData.bankAccountNumber || "—"}</span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                <span className="text-slate-500 font-semibold">Bank Name:</span>
+                                <span className="font-bold text-slate-900">{formData.bankName || "—"}</span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                <span className="text-slate-500 font-semibold">Bank Branch:</span>
+                                <span className="font-bold text-slate-900">{formData.bankBranch || "—"}</span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                <span className="text-slate-500 font-semibold">Bank Branch Address:</span>
+                                <span className="font-medium text-slate-800">{formData.bankAddress || "—"}</span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                <span className="text-slate-500 font-semibold">Bank Contact Number:</span>
+                                <span className="font-medium text-slate-800">{formData.bankContactNumber || "—"}</span>
+                              </div>
+                              {formData.depositedBy && (
+                                <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                  <span className="text-slate-500 font-semibold">Deposited By:</span>
+                                  <span className="font-bold text-slate-900">{formData.depositedBy}</span>
+                                </div>
+                              )}
+                              {formData.remarks && (
+                                <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                  <span className="text-slate-500 font-semibold">Remarks:</span>
+                                  <span className="font-medium text-slate-800 italic">{formData.remarks}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 text-xs text-amber-900 flex items-center gap-2">
+                              <ShieldCheck className="h-4 w-4 shrink-0 text-amber-700" />
+                              <span>
+                                Audit Lock: Once recorded, this fixed deposit entry cannot be directly altered.
+                                Interest is no longer auto-projected — use Bank Interest to record each credit as it arrives.
+                              </span>
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
                   </>

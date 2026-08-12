@@ -7,6 +7,7 @@ import React, { useState } from "react";
 import { User } from "../types";
 import { USERS } from "../mockData";
 import { Lock, UserCheck, Shield, KeyRound, AlertCircle } from "lucide-react";
+import Logo from "./Logo";
 
 interface LoginProps {
   onLoginSuccess: (user: User) => void;
@@ -37,9 +38,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="h-16 w-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-md border border-blue-500">
-            <Shield className="h-9 w-9 text-white" />
-          </div>
+          <Logo className="h-16 w-16 rounded-2xl">
+            <div className="h-16 w-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-md border border-blue-500">
+              <Shield className="h-9 w-9 text-white" />
+            </div>
+          </Logo>
         </div>
         <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-slate-900 font-sans">
           IHMA FinApp

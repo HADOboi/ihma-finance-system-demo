@@ -7,10 +7,12 @@ import { useState, useEffect } from "react";
 import { User, AccountHead, Transaction, OrgLevel, UserRole, HeadType, Asset, BankBalance, ChapterMaster, Member, ReportTab } from "./types";
 import { loadDatabase, saveDatabase, resetToDefaults, CHAPTERS } from "./mockData";
 import { ensureDoctorPrefix } from "./utils/formatters";
+import { getFinancialUnitName, getUserFinancialUnitId, isWritableFinancialUnit } from "./utils/financialUnits";
 import Login from "./components/Login";
 import TreasurerEntry from "./components/TreasurerEntry";
 import AdminPanel from "./components/AdminPanel";
 import Dashboard from "./components/Dashboard";
+import Logo from "./components/Logo";
 import {
   ShieldAlert,
   LogOut,
@@ -100,6 +102,8 @@ export default function App() {
     newTx: Omit<Transaction, "id" | "createdBy" | "createdAt" | "chapterId" | "headName">
   ) => {
     if (!db || !currentUser) return;
+    const financialUnitId = getUserFinancialUnitId(currentUser);
+    if (!isWritableFinancialUnit(currentUser, financialUnitId)) return;
 
     const id = `tx_${Date.now()}`;
     const selectedHead = db.accountHeads.find((h) => h.id === newTx.headId);
@@ -108,7 +112,10 @@ export default function App() {
       ...newTx,
       id,
       headName: newTx.type === HeadType.Loan ? "Loan" : (selectedHead ? selectedHead.name : ""),
-      chapterId: currentUser.nodeId || "cochin",
+      chapterId: financialUnitId,
+      financialUnitId,
+      chapterIdInput: financialUnitId,
+      chapterNameInput: getFinancialUnitName(financialUnitId),
       createdBy: currentUser.username,
       createdAt: new Date().toISOString(),
     };
@@ -165,20 +172,65 @@ export default function App() {
 
   // 5.2 Add Asset
   const handleAddAsset = (newAsset: Omit<Asset, "id" | "slNo">) => {
-    if (!db) return;
+    if (!db || !currentUser) return;
+    const financialUnitId = getUserFinancialUnitId(currentUser);
+    if (!isWritableFinancialUnit(currentUser, financialUnitId)) return;
     const id = `ast_${Date.now()}`;
     const slNo = db.assets.length + 1;
-    const fullAsset: Asset = { ...newAsset, id, slNo };
-    syncDatabase({ ...db, assets: [fullAsset, ...db.assets] });
+    const fullAsset: Asset = { ...newAsset, id, slNo, financialUnitId, chapterIdInput: financialUnitId, chapterNameInput: getFinancialUnitName(financialUnitId) };
+
+    // An asset purchase is real money leaving the chapter, so mirror it as a capital
+    // expense. Without this the Asset Register and the cash/bank totals disagree.
+    const purchaseHead = db.accountHeads.find((h) => h.id === "exp_asset_purchase");
+    const expenseTx: Transaction = {
+      id: `tx_${Date.now()}_asset`,
+      date: newAsset.date,
+      type: HeadType.Expense,
+      headId: "exp_asset_purchase",
+      headName: purchaseHead ? purchaseHead.name : "Asset purchase (Capital)",
+      amount: newAsset.totalValue,
+      payableAmount: newAsset.totalValue,
+      paidAmount: newAsset.totalValue,
+      balanceAmount: 0,
+      paymentMode: newAsset.paymentMode,
+      paidByExpense: currentUser.name,
+      paidTo: newAsset.assetName,
+      chapterId: financialUnitId,
+      financialUnitId,
+      chapterIdInput: financialUnitId,
+      chapterNameInput: getFinancialUnitName(financialUnitId),
+      assetRef: newAsset.assetId,
+      description: `Asset purchase: ${newAsset.assetName} (${newAsset.assetId})`,
+      remarks: newAsset.remarks,
+      createdBy: currentUser.username,
+      createdAt: new Date().toISOString(),
+    };
+
+    syncDatabase({
+      ...db,
+      assets: [fullAsset, ...db.assets],
+      transactions: [expenseTx, ...db.transactions],
+    });
   };
 
-  // 5.3 Add Bank Balance
+  // 5.3 Add FD Record
+  //
+  // The principal is not income or expense — it is a transfer from the bank account
+  // into the FD, so recording an FD never touches the ledger. Interest is no longer
+  // projected or auto-posted either: the treasurer logs each interest credit by hand
+  // as a Bank interest entry, which lands in the ledger as Bank income.
   const handleAddBankBalance = (newBalance: Omit<BankBalance, "id" | "slNo">) => {
-    if (!db) return;
+    if (!db || !currentUser) return;
+    const financialUnitId = getUserFinancialUnitId(currentUser);
+    if (!isWritableFinancialUnit(currentUser, financialUnitId)) return;
     const id = `bal_${Date.now()}`;
     const slNo = db.bankBalances.length + 1;
-    const fullBalance: BankBalance = { ...newBalance, id, slNo };
-    syncDatabase({ ...db, bankBalances: [fullBalance, ...db.bankBalances] });
+    const fullBalance: BankBalance = { ...newBalance, id, slNo, financialUnitId, chapterIdInput: financialUnitId, chapterNameInput: getFinancialUnitName(financialUnitId) };
+
+    syncDatabase({
+      ...db,
+      bankBalances: [fullBalance, ...db.bankBalances],
+    });
   };
 
   // 6. Reset Database to Default Demo State
@@ -248,8 +300,7 @@ export default function App() {
     );
   }
 
-  const isLocalTreasurer =
-    currentUser.role === UserRole.Treasurer || currentUser.role === UserRole.Admin;
+  const isLocalTreasurer = currentUser.role === UserRole.Treasurer;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans selection:bg-blue-100 selection:text-blue-900">
@@ -258,9 +309,11 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex flex-row items-center justify-between gap-3">
           {/* Logo Brand */}
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 sm:h-10 sm:w-10 bg-blue-600 rounded-lg sm:rounded-xl flex items-center justify-center border border-blue-500 shadow-sm shrink-0">
-              <Award className="h-4.5 w-4.5 sm:h-5.5 sm:w-5.5 text-white" />
-            </div>
+            <Logo className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-blue-600 rounded-lg sm:rounded-xl flex items-center justify-center border border-blue-500 shadow-sm shrink-0">
+                <Award className="h-4.5 w-4.5 sm:h-5.5 sm:w-5.5 text-white" />
+              </div>
+            </Logo>
             <div>
               <h1 className="font-display font-semibold text-base sm:text-xl text-slate-900 tracking-tight leading-none">
                 IHMA FinApp
@@ -339,6 +392,7 @@ export default function App() {
                 membersList={db.members}
                 chapterDirectory={db.chapterDirectory}
                 transactions={db.transactions}
+                assetsList={db.assets}
                 onAddTransaction={handleAddTransaction}
                 onUpdateTransaction={handleUpdateTransaction}
                 editingTransaction={editingTransaction}
@@ -514,20 +568,20 @@ export default function App() {
                         <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-teal-600 group-hover:translate-x-1 transition-transform" />
                       </button>
 
-                      {/* Bank Balances */}
+                      {/* FD Register */}
                       <button
                         onClick={() => handleOpenReports("bank_balances")}
                         className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs hover:border-teal-500 hover:shadow-xs transition-all text-left flex items-center justify-between cursor-pointer group"
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center text-lg shrink-0">
-                            🏦
+                            📜
                           </div>
                           <div>
                             <h4 className="font-bold text-sm text-slate-900 group-hover:text-teal-800 transition-colors">
-                              Bank & FD Balances
+                              FD & Bank
                             </h4>
-                            <p className="text-[11px] text-slate-500">Liquid Savings & Fixed Deposits</p>
+                            <p className="text-[11px] text-slate-500">Fixed Deposits</p>
                           </div>
                         </div>
                         <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-teal-600 group-hover:translate-x-1 transition-transform" />

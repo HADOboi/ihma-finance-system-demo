@@ -67,6 +67,13 @@ export interface AccountHead {
   isActive?: boolean; // Can be disabled
 }
 
+export interface FinancialUnit {
+  id: string;
+  name: string;
+  level: OrgLevel;
+  parentId?: string;
+}
+
 // 1. Asset Register Schema (Sheet 1)
 export interface Asset {
   slNo: number;
@@ -74,24 +81,49 @@ export interface Asset {
   date: string; // Entry date YYYY-MM-DD
   chapterIdInput: string; // Reference chapter ID
   chapterNameInput: string; // Chapter name
+  financialUnitId?: string; // Owning National, State, District, or Local financial unit
   assetId: string; // Unique asset ID e.g. AST-101
   assetName: string; // Asset details
   purchaseDate: string; // YYYY-MM-DD
-  assetValue: number; // Value in INR
+  quantity: number; // Number of identical items purchased, e.g. 3 tables
+  assetValue: number; // Unit price in INR (per item)
+  totalValue: number; // assetValue * quantity
+  paymentMode: "Cash" | "Bank"; // How the asset was paid for
   category: string; // Asset category (Electronics, Furniture, etc)
   assetLife: number; // Life in years
   custodianName: string; // Person responsible
+  depreciationAmount: number; // Straight-line annual depreciation: totalValue / assetLife
+  netAmount: number; // totalValue - depreciationAmount (written-down value after 1 year)
+  remarks?: string; // Optional notes
 }
 
-// 2. FD & Bank Balances Schema (Sheet 2)
+// 2. FD Register Schema (Sheet 2)
 export interface BankBalance {
   slNo: number;
   id: string;
   date: string; // YYYY-MM-DD
   chapterIdInput: string; // Reference chapter ID
   chapterNameInput: string; // Chapter name
-  amountType: "FD" | "Bank Balance"; // FD or Bank Balance
-  amount: number; // Balance in INR
+  financialUnitId?: string; // Owning National, State, District, or Local financial unit
+  amountType: "FD"; // FD only — bank interest is recorded straight to the income ledger
+  amount: number; // FD principal in INR
+  depositedBy?: string; // Office bearer who made the deposit
+  maturityDate?: string; // YYYY-MM-DD, as stated on the FD certificate
+  bankName?: string;
+  bankBranch?: string;
+  bankAccountNumber?: string;
+  bankAddress?: string; // Bank / branch address
+  bankContactNumber?: string;
+  remarks?: string; // Optional notes
+
+  // Legacy fields — FDs used to carry a rate and term so interest could be
+  // projected and auto-posted. Interest is now entered by hand as it is
+  // received, so new records never set these; old records still display them.
+  termYears?: number;
+  interestRate?: number;
+  annualInterest?: number;
+  totalInterest?: number;
+  maturityValue?: number;
 }
 
 // 3. Chapter Directory / Master Schema (Sheet 3)
@@ -130,6 +162,7 @@ export interface Transaction {
   voucherNumber?: string;
   description?: string; // Remarks
   chapterId: string;
+  financialUnitId?: string; // Authoritative financial-data owner; legacy records fall back to chapterId
   createdBy: string; // username
   createdAt: string; // ISO timestamp
   updatedAt?: string; // ISO timestamp
@@ -164,6 +197,12 @@ export interface Transaction {
   repaymentPaymentMode?: "Cash" | "Bank"; // Mode of payment for loan repayment
   repaymentDate?: string; // Date of repayment
   remarks?: string; // Additional notes
+
+  // Capital purchase link (asset register cross-reference)
+  assetRef?: string; // Asset ID this expense paid for, e.g. AST-[#009]
+
+  // Bank interest linkage
+  isFdInterest?: boolean; // True for bank / FD interest receipts logged from the FD entry screen
 }
 
 // 7. Member Directory Schema (Sheet 7)
@@ -227,4 +266,3 @@ export type ReportTab =
   | "monthly"
   | "yearly"
   | "raw";
-

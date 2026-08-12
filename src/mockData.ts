@@ -20,7 +20,7 @@ import {
 } from "./types";
 
 // Database Version Key - Incrementing this forces fresh seed data loading
-export const CURRENT_DB_VERSION = "v5_rich_seed_2026";
+export const CURRENT_DB_VERSION = "v10_hierarchical_financial_units_2026";
 
 // Organizational hierarchy nodes
 export const STATES: StateNode[] = [
@@ -72,6 +72,7 @@ export const DEFAULT_ACCOUNT_HEADS: AccountHead[] = [
   { id: "exp_postage", name: "Postage", type: HeadType.Expense, isSystem: true, isActive: true },
   { id: "exp_digital_media", name: "Digital media", type: HeadType.Expense, isSystem: true, isActive: true },
   { id: "exp_bank", name: "Bank expense", type: HeadType.Expense, isSystem: true, isActive: true },
+  { id: "exp_asset_purchase", name: "Asset purchase (Capital)", type: HeadType.Expense, isSystem: true, isActive: true },
 ];
 
 // Predefined Users
@@ -128,6 +129,15 @@ export const USERS: User[] = [
     password: "pass",
   },
   {
+    username: "ekm_treas",
+    name: "Dr. Anjali Nair",
+    role: UserRole.Treasurer,
+    level: OrgLevel.District,
+    nodeId: "ernakulam",
+    designation: "Ernakulam District Treasurer",
+    password: "pass",
+  },
+  {
     username: "cochin_treasurer",
     name: "Dr. Basheer",
     role: UserRole.Treasurer,
@@ -176,10 +186,16 @@ export const PRELOADED_ASSETS: Asset[] = [
     assetId: "AST-[#001]",
     assetName: "High-Lumen 4K Laser Projector & Sound System",
     purchaseDate: "2024-05-05",
+    quantity: 1,
     assetValue: 55000,
+    totalValue: 55000,
+    paymentMode: "Bank",
     category: "Electronics",
     assetLife: 5,
     custodianName: "Dr. Basheer",
+    depreciationAmount: 11000,
+    netAmount: 44000,
+    remarks: "Installed in main chapter conference hall.",
   },
   {
     slNo: 2,
@@ -190,10 +206,16 @@ export const PRELOADED_ASSETS: Asset[] = [
     assetId: "AST-[#002]",
     assetName: "Executive Conference Table & 16 Ergonomic Chairs",
     purchaseDate: "2024-08-15",
+    quantity: 1,
     assetValue: 42000,
+    totalValue: 42000,
+    paymentMode: "Bank",
     category: "Furniture",
     assetLife: 10,
     custodianName: "Dr. Basheer",
+    depreciationAmount: 4200,
+    netAmount: 37800,
+    remarks: "Board room furniture set; annual polish upkeep.",
   },
   {
     slNo: 3,
@@ -204,10 +226,16 @@ export const PRELOADED_ASSETS: Asset[] = [
     assetId: "AST-[#003]",
     assetName: "Digital Health Kiosk & Diagnostic Touch Monitor",
     purchaseDate: "2025-01-10",
+    quantity: 1,
     assetValue: 85000,
+    totalValue: 85000,
+    paymentMode: "Bank",
     category: "Medical Equipment",
     assetLife: 7,
     custodianName: "Dr. Abraham Mathew",
+    depreciationAmount: 12143,
+    netAmount: 72857,
+    remarks: "Under manufacturer warranty until 2027.",
   },
   {
     slNo: 4,
@@ -218,10 +246,16 @@ export const PRELOADED_ASSETS: Asset[] = [
     assetId: "AST-[#004]",
     assetName: "Office Workstation Laptops (2 Units)",
     purchaseDate: "2025-04-05",
-    assetValue: 125000,
+    quantity: 2,
+    assetValue: 62500,
+    totalValue: 125000,
+    paymentMode: "Bank",
     category: "Electronics",
     assetLife: 4,
     custodianName: "Dr. Faisal Rahman",
+    depreciationAmount: 31250,
+    netAmount: 93750,
+    remarks: "Issued to chapter office staff; serial log maintained.",
   },
   {
     slNo: 5,
@@ -232,10 +266,16 @@ export const PRELOADED_ASSETS: Asset[] = [
     assetId: "AST-[#005]",
     assetName: "Heavy-Duty Laser Printer & Document Scanner",
     purchaseDate: "2025-08-01",
+    quantity: 1,
     assetValue: 32000,
+    totalValue: 32000,
+    paymentMode: "Cash",
     category: "Office Electronics",
     assetLife: 4,
     custodianName: "Dr. R. Ramanujan",
+    depreciationAmount: 8000,
+    netAmount: 24000,
+    remarks: "Shared printer for chapter correspondence.",
   },
   {
     slNo: 6,
@@ -246,10 +286,16 @@ export const PRELOADED_ASSETS: Asset[] = [
     assetId: "AST-[#006]",
     assetName: "Solar Inverter & Tubular Battery System",
     purchaseDate: "2025-11-08",
+    quantity: 1,
     assetValue: 68000,
+    totalValue: 68000,
+    paymentMode: "Bank",
     category: "Electrical Equipment",
     assetLife: 8,
     custodianName: "Dr. Sandeep Kumar",
+    depreciationAmount: 8500,
+    netAmount: 59500,
+    remarks: "Backup power for chapter office and server rack.",
   },
   {
     slNo: 7,
@@ -260,10 +306,16 @@ export const PRELOADED_ASSETS: Asset[] = [
     assetId: "AST-[#007]",
     assetName: "2-Ton Inverter Air Conditioner Unit",
     purchaseDate: "2026-01-28",
+    quantity: 1,
     assetValue: 46000,
+    totalValue: 46000,
+    paymentMode: "Bank",
     category: "Appliances",
     assetLife: 6,
     custodianName: "Dr. Basheer",
+    depreciationAmount: 7667,
+    netAmount: 38333,
+    remarks: "Split unit servicing due every six months.",
   },
   {
     slNo: 8,
@@ -274,104 +326,105 @@ export const PRELOADED_ASSETS: Asset[] = [
     assetId: "AST-[#008]",
     assetName: "Medical Reference Library Cabinet & Rare Books",
     purchaseDate: "2026-04-15",
+    quantity: 1,
     assetValue: 28000,
+    totalValue: 28000,
+    paymentMode: "Cash",
     category: "Furniture",
     assetLife: 15,
     custodianName: "Dr. Ananya Sharma",
+    depreciationAmount: 1867,
+    netAmount: 26133,
+    remarks: "Rare book collection; restricted access register kept.",
   },
 ];
 
-// Sheet 2: FD & Bank Balances
+// Sheet 2: FD Register
 export const PRELOADED_BANK_BALANCES: BankBalance[] = [
   {
     slNo: 1,
     id: "bank_1",
-    date: "2026-06-30",
-    chapterIdInput: "KL-EK-CO01",
-    chapterNameInput: "Cochin Chapter",
-    amountType: "Bank Balance",
-    amount: 385000,
-  },
-  {
-    slNo: 2,
-    id: "bank_2",
-    date: "2026-06-30",
+    date: "2024-05-20",
     chapterIdInput: "KL-EK-CO01",
     chapterNameInput: "Cochin Chapter",
     amountType: "FD",
     amount: 800000,
+    depositedBy: "Dr. Basheer",
+    termYears: 3,
+    interestRate: 7.1,
+    annualInterest: 56800,
+    totalInterest: 182785,
+    maturityValue: 982785,
+    maturityDate: "2027-05-20",
+    remarks: "Chapter reserve deposit with SBI Ernakulam branch.",
   },
   {
-    slNo: 3,
-    id: "bank_3",
-    date: "2026-06-30",
-    chapterIdInput: "KL-EK-AL02",
-    chapterNameInput: "Aluva Chapter",
-    amountType: "Bank Balance",
-    amount: 245000,
-  },
-  {
-    slNo: 4,
-    id: "bank_4",
-    date: "2026-06-30",
+    slNo: 2,
+    id: "bank_2",
+    date: "2024-09-10",
     chapterIdInput: "KL-EK-AL02",
     chapterNameInput: "Aluva Chapter",
     amountType: "FD",
     amount: 500000,
+    depositedBy: "Dr. Abraham Mathew",
+    termYears: 5,
+    interestRate: 7.4,
+    annualInterest: 37000,
+    totalInterest: 214483,
+    maturityValue: 714483,
+    maturityDate: "2029-09-10",
+    remarks: "Building fund corpus; auto-renewal disabled.",
+  },
+  {
+    slNo: 3,
+    id: "bank_3",
+    date: "2025-02-15",
+    chapterIdInput: "TN-CN-CC01",
+    chapterNameInput: "Chennai Central",
+    amountType: "FD",
+    amount: 1000000,
+    depositedBy: "Dr. R. Ramanujan",
+    termYears: 2,
+    interestRate: 6.9,
+    annualInterest: 69000,
+    totalInterest: 142761,
+    maturityValue: 1142761,
+    maturityDate: "2027-02-15",
+    remarks: "Short-term surplus parked till CME season.",
+  },
+  {
+    slNo: 4,
+    id: "bank_4",
+    date: "2025-07-01",
+    chapterIdInput: "KL-KZ-CC01",
+    chapterNameInput: "Calicut City",
+    amountType: "FD",
+    amount: 600000,
+    depositedBy: "Dr. Faisal Rahman",
+    termYears: 3,
+    interestRate: 7.1,
+    annualInterest: 42600,
+    totalInterest: 137089,
+    maturityValue: 737089,
+    maturityDate: "2028-07-01",
+    remarks: "Chapter contingency reserve.",
   },
   {
     slNo: 5,
     id: "bank_5",
     date: "2026-06-30",
-    chapterIdInput: "TN-CN-CC01",
-    chapterNameInput: "Chennai Central",
-    amountType: "Bank Balance",
-    amount: 412000,
-  },
-  {
-    slNo: 6,
-    id: "bank_6",
-    date: "2026-06-30",
-    chapterIdInput: "TN-CN-CC01",
-    chapterNameInput: "Chennai Central",
-    amountType: "FD",
-    amount: 1000000,
-  },
-  {
-    slNo: 7,
-    id: "bank_7",
-    date: "2026-06-30",
-    chapterIdInput: "KL-KZ-CC01",
-    chapterNameInput: "Calicut City",
-    amountType: "Bank Balance",
-    amount: 290000,
-  },
-  {
-    slNo: 8,
-    id: "bank_8",
-    date: "2026-06-30",
-    chapterIdInput: "KL-KZ-CC01",
-    chapterNameInput: "Calicut City",
-    amountType: "FD",
-    amount: 600000,
-  },
-  {
-    slNo: 9,
-    id: "bank_9",
-    date: "2026-06-30",
-    chapterIdInput: "DL-ND-HQ00",
-    chapterNameInput: "National Headquarters",
-    amountType: "Bank Balance",
-    amount: 1850000,
-  },
-  {
-    slNo: 10,
-    id: "bank_10",
-    date: "2026-06-30",
     chapterIdInput: "DL-ND-HQ00",
     chapterNameInput: "National Headquarters",
     amountType: "FD",
     amount: 3500000,
+    depositedBy: "Dr. Sandeep Kumar",
+    termYears: 5,
+    interestRate: 7.4,
+    annualInterest: 259000,
+    totalInterest: 1501375,
+    maturityValue: 5001375,
+    maturityDate: "2031-06-30",
+    remarks: "National corpus deposit; board resolution 2026/14.",
   },
 ];
 
@@ -818,6 +871,129 @@ export const PRELOADED_MEMBERS: Member[] = [
 // Sheets 4, 5, 6: Transaction Ledger
 // Note: Income >> Expense, Bank >> Cash
 export const PRELOADED_TRANSACTIONS: Transaction[] = [
+  // ---- Auto-posted FD interest (Bank income), compounded annually ----
+  {
+    id: "tx_fdint_1_1",
+    date: "2025-05-20",
+    type: HeadType.Income,
+    headId: "inc_bank",
+    headName: "Bank income",
+    amount: 56800,
+    offeredAmount: 56800,
+    paidAmount: 56800,
+    balanceAmount: 0,
+    paymentMode: "Bank",
+    collectedBy: "Dr. Basheer",
+    paidBy: "Bank (FD Interest)",
+    chapterId: "cochin",
+    chapterIdInput: "KL-EK-CO01",
+    chapterNameInput: "Cochin Chapter",
+    fdRef: "bank_1",
+    isFdInterest: true,
+    fdYear: 1,
+    fdBalanceAfter: 856800,
+    description: "FD interest year 1 of 3 — 7.1% on Rs 800,000, balance Rs 856,800",
+    createdBy: "cochin_treasurer",
+    createdAt: "2025-05-20T10:00:00Z",
+  },
+  {
+    id: "tx_fdint_1_2",
+    date: "2026-05-20",
+    type: HeadType.Income,
+    headId: "inc_bank",
+    headName: "Bank income",
+    amount: 60833,
+    offeredAmount: 60833,
+    paidAmount: 60833,
+    balanceAmount: 0,
+    paymentMode: "Bank",
+    collectedBy: "Dr. Basheer",
+    paidBy: "Bank (FD Interest)",
+    chapterId: "cochin",
+    chapterIdInput: "KL-EK-CO01",
+    chapterNameInput: "Cochin Chapter",
+    fdRef: "bank_1",
+    isFdInterest: true,
+    fdYear: 2,
+    fdBalanceAfter: 917633,
+    description: "FD interest year 2 of 3 — 7.1% on Rs 856,800, balance Rs 917,633",
+    createdBy: "cochin_treasurer",
+    createdAt: "2026-05-20T10:00:00Z",
+  },
+  {
+    id: "tx_fdint_2_1",
+    date: "2025-09-10",
+    type: HeadType.Income,
+    headId: "inc_bank",
+    headName: "Bank income",
+    amount: 37000,
+    offeredAmount: 37000,
+    paidAmount: 37000,
+    balanceAmount: 0,
+    paymentMode: "Bank",
+    collectedBy: "Dr. Abraham Mathew",
+    paidBy: "Bank (FD Interest)",
+    chapterId: "aluva",
+    chapterIdInput: "KL-EK-AL02",
+    chapterNameInput: "Aluva Chapter",
+    fdRef: "bank_2",
+    isFdInterest: true,
+    fdYear: 1,
+    fdBalanceAfter: 537000,
+    description: "FD interest year 1 of 5 — 7.4% on Rs 500,000, balance Rs 537,000",
+    createdBy: "aluva_treasurer",
+    createdAt: "2025-09-10T10:00:00Z",
+  },
+  {
+    id: "tx_fdint_3_1",
+    date: "2026-02-15",
+    type: HeadType.Income,
+    headId: "inc_bank",
+    headName: "Bank income",
+    amount: 69000,
+    offeredAmount: 69000,
+    paidAmount: 69000,
+    balanceAmount: 0,
+    paymentMode: "Bank",
+    collectedBy: "Dr. R. Ramanujan",
+    paidBy: "Bank (FD Interest)",
+    chapterId: "chennai_central",
+    chapterIdInput: "TN-CN-CC01",
+    chapterNameInput: "Chennai Central",
+    fdRef: "bank_3",
+    isFdInterest: true,
+    fdYear: 1,
+    fdBalanceAfter: 1069000,
+    description: "FD interest year 1 of 2 — 6.9% on Rs 1,000,000, balance Rs 1,069,000",
+    createdBy: "chennai_treasurer",
+    createdAt: "2026-02-15T10:00:00Z",
+  },
+  {
+    id: "tx_fdint_4_1",
+    date: "2026-07-01",
+    type: HeadType.Income,
+    headId: "inc_bank",
+    headName: "Bank income",
+    amount: 42600,
+    offeredAmount: 42600,
+    paidAmount: 42600,
+    balanceAmount: 0,
+    paymentMode: "Bank",
+    collectedBy: "Dr. Faisal Rahman",
+    paidBy: "Bank (FD Interest)",
+    chapterId: "calicut_city",
+    chapterIdInput: "KL-KZ-CC01",
+    chapterNameInput: "Calicut City",
+    fdRef: "bank_4",
+    isFdInterest: true,
+    fdYear: 1,
+    fdBalanceAfter: 642600,
+    description: "FD interest year 1 of 3 — 7.1% on Rs 600,000, balance Rs 642,600",
+    createdBy: "cochin_treasurer",
+    createdAt: "2026-07-01T10:00:00Z",
+  },
+  // ---- Auto-posted FD interest (Bank income), one per completed FD year ----
+
   // ==================== RECEIPTS / INCOMES (FY 2024, 2025, 2026) ====================
   {
     slNo: 1,
@@ -1760,6 +1936,43 @@ export const PRELOADED_TRANSACTIONS: Transaction[] = [
   },
 ];
 
+// Each legacy local record is owned by its chapter. New records carry an explicit
+// financialUnitId, allowing National, State, District, and Local units to coexist.
+const normalizeFinancialOwnership = <T extends { financialUnitId?: string; chapterId?: string; chapterIdInput?: string }>(record: T) => ({
+  ...record,
+  financialUnitId: record.financialUnitId || record.chapterId || chapterIdToUnitId(record.chapterIdInput),
+});
+
+const chapterIdToUnitId = (chapterIdInput?: string) => {
+  const chapter = PRELOADED_CHAPTER_DIRECTORY.find((entry) => entry.id === chapterIdInput) ||
+    PRELOADED_CHAPTER_DIRECTORY.find((entry) => entry.chapterName === chapterIdInput);
+  return chapter?.id || "cochin";
+};
+
+const normalizedTransactions = () => PRELOADED_TRANSACTIONS.map(normalizeFinancialOwnership);
+const normalizedAssets = () => PRELOADED_ASSETS.map(normalizeFinancialOwnership);
+const normalizedBankBalances = () => PRELOADED_BANK_BALANCES.map(normalizeFinancialOwnership);
+
+// Demonstrates independent National, State, and District ownership alongside the
+// existing local chapter data. These records intentionally do not roll up into a parent.
+PRELOADED_TRANSACTIONS.push(
+  {
+    id: "seed_national_income", date: "2026-05-02", type: HeadType.Income, headId: "inc_donations", headName: "Donations", amount: 250000,
+    chapterId: "national", financialUnitId: "national", chapterIdInput: "national", chapterNameInput: "National Financial Unit",
+    createdBy: "national_treas", createdAt: "2026-05-02T09:00:00Z", paidAmount: 250000, offeredAmount: 250000, balanceAmount: 0, paymentMode: "Bank", remarks: "National donor contribution"
+  },
+  {
+    id: "seed_kerala_expense", date: "2026-06-11", type: HeadType.Expense, headId: "exp_meeting", headName: "Meeting expense", amount: 18000,
+    chapterId: "kerala", financialUnitId: "kerala", chapterIdInput: "kerala", chapterNameInput: "Kerala State",
+    createdBy: "kerala_treas", createdAt: "2026-06-11T09:00:00Z", paidAmount: 18000, payableAmount: 18000, balanceAmount: 0, paymentMode: "Bank", remarks: "State executive meeting"
+  },
+  {
+    id: "seed_ernakulam_income", date: "2026-06-18", type: HeadType.Income, headId: "inc_sponsorship", headName: "Sponsorship", amount: 42000,
+    chapterId: "ernakulam", financialUnitId: "ernakulam", chapterIdInput: "ernakulam", chapterNameInput: "Ernakulam District",
+    createdBy: "ekm_treas", createdAt: "2026-06-18T09:00:00Z", paidAmount: 42000, offeredAmount: 42000, balanceAmount: 0, paymentMode: "Bank", remarks: "District CME sponsorship"
+  }
+);
+
 // Database Management Helpers
 export function loadDatabase() {
   const users = localStorage.getItem("ihma_users");
@@ -1785,18 +1998,18 @@ export function loadDatabase() {
     localStorage.setItem("ihma_db_version", CURRENT_DB_VERSION);
     localStorage.setItem("ihma_users", JSON.stringify(USERS));
     localStorage.setItem("ihma_account_heads", JSON.stringify(DEFAULT_ACCOUNT_HEADS));
-    localStorage.setItem("ihma_transactions", JSON.stringify(PRELOADED_TRANSACTIONS));
-    localStorage.setItem("ihma_assets", JSON.stringify(PRELOADED_ASSETS));
-    localStorage.setItem("ihma_bank_balances", JSON.stringify(PRELOADED_BANK_BALANCES));
+    localStorage.setItem("ihma_transactions", JSON.stringify(normalizedTransactions()));
+    localStorage.setItem("ihma_assets", JSON.stringify(normalizedAssets()));
+    localStorage.setItem("ihma_bank_balances", JSON.stringify(normalizedBankBalances()));
     localStorage.setItem("ihma_chapter_directory", JSON.stringify(PRELOADED_CHAPTER_DIRECTORY));
     localStorage.setItem("ihma_members", JSON.stringify(PRELOADED_MEMBERS));
 
     return {
       users: USERS,
       accountHeads: DEFAULT_ACCOUNT_HEADS,
-      transactions: PRELOADED_TRANSACTIONS,
-      assets: PRELOADED_ASSETS,
-      bankBalances: PRELOADED_BANK_BALANCES,
+      transactions: normalizedTransactions(),
+      assets: normalizedAssets(),
+      bankBalances: normalizedBankBalances(),
       chapterDirectory: PRELOADED_CHAPTER_DIRECTORY,
       members: PRELOADED_MEMBERS,
     };
@@ -1811,7 +2024,7 @@ export function loadDatabase() {
     "inc_trust_grant",
   ]);
   const savedHeads = JSON.parse(accountHeads) as AccountHead[];
-  const savedTransactions = JSON.parse(transactions) as Transaction[];
+  const savedTransactions = (JSON.parse(transactions) as Transaction[]).map(normalizeFinancialOwnership);
   const mergedHeads = [
     ...DEFAULT_ACCOUNT_HEADS,
     ...savedHeads.filter((head) => !retiredHeadIds.has(head.id) && !DEFAULT_ACCOUNT_HEADS.some((defaultHead) => defaultHead.id === head.id)),
@@ -1829,8 +2042,8 @@ export function loadDatabase() {
     users: JSON.parse(users),
     accountHeads: mergedHeads,
     transactions: mergedTransactions,
-    assets: JSON.parse(assets),
-    bankBalances: JSON.parse(bankBalances),
+    assets: (JSON.parse(assets) as Asset[]).map(normalizeFinancialOwnership),
+    bankBalances: (JSON.parse(bankBalances) as BankBalance[]).map(normalizeFinancialOwnership),
     chapterDirectory: JSON.parse(chapterDirectory),
     members: JSON.parse(members),
   };
@@ -1859,18 +2072,18 @@ export function resetToDefaults() {
   localStorage.setItem("ihma_db_version", CURRENT_DB_VERSION);
   localStorage.setItem("ihma_users", JSON.stringify(USERS));
   localStorage.setItem("ihma_account_heads", JSON.stringify(DEFAULT_ACCOUNT_HEADS));
-  localStorage.setItem("ihma_transactions", JSON.stringify(PRELOADED_TRANSACTIONS));
-  localStorage.setItem("ihma_assets", JSON.stringify(PRELOADED_ASSETS));
-  localStorage.setItem("ihma_bank_balances", JSON.stringify(PRELOADED_BANK_BALANCES));
+  localStorage.setItem("ihma_transactions", JSON.stringify(normalizedTransactions()));
+  localStorage.setItem("ihma_assets", JSON.stringify(normalizedAssets()));
+  localStorage.setItem("ihma_bank_balances", JSON.stringify(normalizedBankBalances()));
   localStorage.setItem("ihma_chapter_directory", JSON.stringify(PRELOADED_CHAPTER_DIRECTORY));
   localStorage.setItem("ihma_members", JSON.stringify(PRELOADED_MEMBERS));
 
   return {
     users: USERS,
     accountHeads: DEFAULT_ACCOUNT_HEADS,
-    transactions: PRELOADED_TRANSACTIONS,
-    assets: PRELOADED_ASSETS,
-    bankBalances: PRELOADED_BANK_BALANCES,
+    transactions: normalizedTransactions(),
+    assets: normalizedAssets(),
+    bankBalances: normalizedBankBalances(),
     chapterDirectory: PRELOADED_CHAPTER_DIRECTORY,
     members: PRELOADED_MEMBERS,
   };

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   User,
   AccountHead,
@@ -25,6 +25,8 @@ import {
   PRELOADED_MEMBERS,
 } from "../mockData";
 import { formatDateDMY, formatINR } from "../utils/formatters";
+import { getFinancialUnitName, getReadableFinancialUnitIds, getUserFinancialUnitId } from "../utils/financialUnits";
+import ReportWizard from "./ReportWizard";
 import {
   TrendingUp,
   TrendingDown,
@@ -54,6 +56,7 @@ import {
   BookOpen,
   BarChart3,
   MapPin,
+  Sparkles,
 } from "lucide-react";
 
 interface DashboardProps {
@@ -85,6 +88,111 @@ type ReportTab =
   | "monthly"
   | "yearly"
   | "raw";
+
+type GeoFilterKey = "states" | "districts" | "chapters";
+
+interface GeoOption {
+  id: string;
+  name: string;
+  /** Small trailing note, e.g. the district a chapter belongs to. */
+  hint?: string;
+}
+
+/**
+ * Compact multiselect dropdown used for the cascading State / District / Chapter
+ * filters. Selection stays in the parent so the existing cascade rules apply.
+ */
+function MultiSelectFilter({
+  label,
+  options,
+  selectedIds,
+  isOpen,
+  onToggleOpen,
+  onToggleOption,
+  onSelectAll,
+  onClear,
+  emptyHint,
+  idPrefix,
+  wrapperId,
+}: {
+  label: string;
+  options: GeoOption[];
+  selectedIds: string[];
+  isOpen: boolean;
+  onToggleOpen: () => void;
+  onToggleOption: (id: string) => void;
+  onSelectAll: () => void;
+  onClear: () => void;
+  emptyHint: string;
+  idPrefix: string;
+  wrapperId: string;
+}) {
+  const isEmpty = options.length === 0;
+  // Count only what is actually offered, so a stale id can never inflate the label.
+  const chosen = options.filter((o) => selectedIds.includes(o.id));
+
+  let summary: string;
+  if (isEmpty) summary = emptyHint;
+  else if (chosen.length === 0) summary = `All ${label.toLowerCase()} (${options.length})`;
+  else if (chosen.length === options.length) summary = `All ${label.toLowerCase()} (${options.length})`;
+  else if (chosen.length <= 2) summary = chosen.map((o) => o.name).join(", ");
+  else summary = `${chosen.length} of ${options.length} selected`;
+
+  return (
+    <div className="relative" id={wrapperId}>
+      <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">{label}</span>
+      <button
+        type="button"
+        disabled={isEmpty}
+        onClick={onToggleOpen}
+        id={`${idPrefix}-dropdown-button`}
+        aria-expanded={isOpen}
+        className={`w-full flex items-center justify-between gap-2 px-3 py-2 bg-white border rounded-xl text-xs font-bold shadow-2xs transition-colors ${
+          isEmpty
+            ? "border-slate-200 text-slate-400 cursor-not-allowed"
+            : "border-slate-300 text-slate-700 hover:border-blue-400 cursor-pointer"
+        }`}
+      >
+        <span className="truncate text-left">{summary}</span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {isOpen && !isEmpty && (
+        <div className="absolute left-0 right-0 z-30 mt-1.5 bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 bg-slate-50/70">
+            <button type="button" onClick={onSelectAll} className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer">
+              Select all
+            </button>
+            <button type="button" onClick={onClear} className="text-[10px] font-bold text-slate-500 hover:underline cursor-pointer">
+              Clear
+            </button>
+          </div>
+          <div className="max-h-56 overflow-y-auto p-1.5 space-y-0.5">
+            {options.map((o) => {
+              const checked = selectedIds.includes(o.id);
+              return (
+                <label
+                  key={o.id}
+                  id={`${idPrefix}-${o.id}`}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => onToggleOption(o.id)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="truncate">{o.name}</span>
+                  {o.hint && <span className="text-[9px] text-slate-400 ml-auto shrink-0">{o.hint}</span>}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Dashboard({
   currentUser,
@@ -127,36 +235,35 @@ export default function Dashboard({
   const [repaymentRemarks, setRepaymentRemarks] = useState<string>("");
 
   // --- Hierarchical Filter States ---
-  const [selectedStates, setSelectedStates] = useState<string[]>(
-    currentUser.level === OrgLevel.National ? STATES.map(s => s.id) : []
-  );
-  
-  const [selectedDistricts, setSelectedDistricts] = useState<string[]>(() => {
-    if (currentUser.level === OrgLevel.National) {
-      return DISTRICTS.map(d => d.id);
-    }
-    if (currentUser.level === OrgLevel.State) {
-      return DISTRICTS.filter(d => d.stateId === currentUser.nodeId).map(d => d.id);
-    }
-    return [];
-  });
+  // Nothing is preselected: the user picks what they want to look at. A Local
+  // user is the exception, since they get no dropdown to pick with.
+  const [selectedStates, setSelectedStates] = useState<string[]>([]);
 
-  const [selectedChapters, setSelectedChapters] = useState<string[]>(() => {
-    if (currentUser.level === OrgLevel.National) {
-      return CHAPTERS.map(c => c.id);
-    }
-    if (currentUser.level === OrgLevel.State) {
-      const allowedDistIds = DISTRICTS.filter(d => d.stateId === currentUser.nodeId).map(d => d.id);
-      return CHAPTERS.filter(c => allowedDistIds.includes(c.districtId)).map(c => c.id);
-    }
-    if (currentUser.level === OrgLevel.District) {
-      return CHAPTERS.filter(c => c.districtId === currentUser.nodeId).map(c => c.id);
-    }
-    if (currentUser.level === OrgLevel.Local) {
-      return [currentUser.nodeId || ""];
-    }
-    return [];
-  });
+  const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
+
+  const [selectedChapters, setSelectedChapters] = useState<string[]>(
+    currentUser.level === OrgLevel.Local ? [currentUser.nodeId || ""] : []
+  );
+  const [includeOwnFinancialUnit, setIncludeOwnFinancialUnit] = useState<boolean>(currentUser.level === OrgLevel.Local);
+
+  // Only one geo dropdown is open at a time; clicking outside the row closes it.
+  const [openGeoFilter, setOpenGeoFilter] = useState<GeoFilterKey | null>(null);
+  const geoFilterRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!openGeoFilter) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (geoFilterRef.current && !geoFilterRef.current.contains(e.target as Node)) {
+        setOpenGeoFilter(null);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [openGeoFilter]);
+
+  const toggleGeoFilter = (key: GeoFilterKey) => {
+    setOpenGeoFilter((current) => (current === key ? null : key));
+  };
 
   // Search filter
   const [searchTerm, setSearchTerm] = useState("");
@@ -177,11 +284,34 @@ export default function Dashboard({
   // Toggle for showing detailed reporting sheets
   const [showDetailedReports, setShowDetailedReports] = useState<boolean>(false);
 
+  // Guided step-by-step report builder
+  const [showReportWizard, setShowReportWizard] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (showReportWizard) window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [showReportWizard]);
+
+  // Human-readable description of what this user is allowed to see.
+  const scopeLabel = useMemo(() => {
+    if (currentUser.level === OrgLevel.National) return "All India — National View";
+    if (currentUser.level === OrgLevel.State) {
+      return `${STATES.find((s) => s.id === currentUser.nodeId)?.name || "State"} — State View`;
+    }
+    if (currentUser.level === OrgLevel.District) {
+      return `${DISTRICTS.find((d) => d.id === currentUser.nodeId)?.name || "District"} — District View`;
+    }
+    return CHAPTERS.find((c) => c.id === currentUser.nodeId)?.name || "Local Chapter";
+  }, [currentUser]);
+
+  const userFinancialUnitId = useMemo(() => getUserFinancialUnitId(currentUser), [currentUser]);
+  const readableFinancialUnitIds = useMemo(() => getReadableFinancialUnitIds(currentUser), [currentUser]);
+
   // --- Dynamic Filtering Lists for UI ---
   // Districts available under chosen States
   const availableDistricts = useMemo(() => {
     if (currentUser.level === OrgLevel.National) {
-      return DISTRICTS.filter((d) => selectedStates.includes(d.stateId));
+      const stateScope = selectedStates.length > 0 ? selectedStates : STATES.map((s) => s.id);
+      return DISTRICTS.filter((d) => stateScope.includes(d.stateId));
     }
     if (currentUser.level === OrgLevel.State) {
       return DISTRICTS.filter((d) => d.stateId === currentUser.nodeId);
@@ -192,43 +322,60 @@ export default function Dashboard({
   // Chapters available under chosen Districts
   const availableChapters = useMemo(() => {
     if (currentUser.level === OrgLevel.National || currentUser.level === OrgLevel.State) {
-      return CHAPTERS.filter((c) => selectedDistricts.includes(c.districtId));
+      const districtScope = selectedDistricts.length > 0 ? selectedDistricts : availableDistricts.map((d) => d.id);
+      return CHAPTERS.filter((c) => districtScope.includes(c.districtId));
     }
     if (currentUser.level === OrgLevel.District) {
       return CHAPTERS.filter((c) => c.districtId === currentUser.nodeId);
     }
     return [];
-  }, [selectedDistricts, currentUser]);
+  }, [selectedDistricts, currentUser, availableDistricts]);
 
-  // Handle toggles with auto-cascading rules
+  const selectedFinancialUnitIds = useMemo(() => {
+    if (currentUser.level === OrgLevel.Local) return [userFinancialUnitId];
+    const stateUnits = currentUser.level === OrgLevel.National
+      ? (selectedStates.length > 0 ? selectedStates : STATES.map((state) => state.id))
+      : [];
+    const districtUnits = selectedDistricts.length > 0 ? selectedDistricts : availableDistricts.map((district) => district.id);
+    const localUnits = selectedChapters.length > 0 ? selectedChapters : availableChapters.map((chapter) => chapter.id);
+    const ownUnit = includeOwnFinancialUnit ? [userFinancialUnitId] : [];
+    return [...new Set([...ownUnit, ...stateUnits, ...districtUnits, ...localUnits])]
+      .filter((id) => readableFinancialUnitIds.includes(id));
+  }, [currentUser.level, userFinancialUnitId, includeOwnFinancialUnit, selectedStates, selectedDistricts, selectedChapters, availableDistricts, availableChapters, readableFinancialUnitIds]);
+
+  // Handle toggles. Selecting never auto-selects anything downstream — the user
+  // picks each level themselves. Deselecting still prunes downstream choices
+  // that are no longer reachable, so nothing filters the data invisibly.
   const handleStateToggle = (stateId: string) => {
-    let updated;
-    if (selectedStates.includes(stateId)) {
-      updated = selectedStates.filter((id) => id !== stateId);
-    } else {
-      updated = [...selectedStates, stateId];
-    }
+    const updated = selectedStates.includes(stateId)
+      ? selectedStates.filter((id) => id !== stateId)
+      : [...selectedStates, stateId];
     setSelectedStates(updated);
 
-    // Cascading: automatically select/deselect districts and chapters
-    const nextDists = DISTRICTS.filter((d) => updated.includes(d.stateId)).map((d) => d.id);
-    setSelectedDistricts(nextDists);
-    const nextChaps = CHAPTERS.filter((c) => nextDists.includes(c.districtId)).map((c) => c.id);
-    setSelectedChapters(nextChaps);
+    const stillValidDists = DISTRICTS.filter(
+      (d) => updated.includes(d.stateId) && selectedDistricts.includes(d.id)
+    ).map((d) => d.id);
+    setSelectedDistricts(stillValidDists);
+    setSelectedChapters((prev) =>
+      prev.filter((chapId) => {
+        const chap = CHAPTERS.find((c) => c.id === chapId);
+        return chap ? stillValidDists.includes(chap.districtId) : false;
+      })
+    );
   };
 
   const handleDistrictToggle = (distId: string) => {
-    let updated;
-    if (selectedDistricts.includes(distId)) {
-      updated = selectedDistricts.filter((id) => id !== distId);
-    } else {
-      updated = [...selectedDistricts, distId];
-    }
+    const updated = selectedDistricts.includes(distId)
+      ? selectedDistricts.filter((id) => id !== distId)
+      : [...selectedDistricts, distId];
     setSelectedDistricts(updated);
 
-    // Cascading: update chapters
-    const nextChaps = CHAPTERS.filter((c) => updated.includes(c.districtId)).map((c) => c.id);
-    setSelectedChapters(nextChaps);
+    setSelectedChapters((prev) =>
+      prev.filter((chapId) => {
+        const chap = CHAPTERS.find((c) => c.id === chapId);
+        return chap ? updated.includes(chap.districtId) : false;
+      })
+    );
   };
 
   const handleChapterToggle = (chapId: string) => {
@@ -241,8 +388,6 @@ export default function Dashboard({
 
   const selectAllStates = () => {
     setSelectedStates(STATES.map((s) => s.id));
-    setSelectedDistricts(DISTRICTS.map((d) => d.id));
-    setSelectedChapters(CHAPTERS.map((c) => c.id));
   };
 
   const selectNoneStates = () => {
@@ -252,21 +397,28 @@ export default function Dashboard({
   };
 
   const selectAllDistricts = () => {
-    const distIds = availableDistricts.map((d) => d.id);
-    setSelectedDistricts(distIds);
-    const chapIds = CHAPTERS.filter((c) => distIds.includes(c.districtId)).map((c) => c.id);
-    setSelectedChapters(chapIds);
+    setSelectedDistricts(availableDistricts.map((d) => d.id));
+  };
+
+  const selectNoneDistricts = () => {
+    setSelectedDistricts([]);
+    // Chapters hang off districts, so clearing districts must clear them too.
+    setSelectedChapters([]);
   };
 
   const selectAllChapters = () => {
     setSelectedChapters(availableChapters.map((c) => c.id));
   };
 
+  const selectNoneChapters = () => {
+    setSelectedChapters([]);
+  };
+
   const filterTransactions = (
     period: PeriodType, year: number, month: number, day: string, from: string, to: string, includeSearch = false
   ) => transactions.filter((tx) => {
       // 1. Organizational chapter filter
-      if (!selectedChapters.includes(tx.chapterId)) {
+      if (!selectedFinancialUnitIds.includes(tx.financialUnitId || tx.chapterId)) {
         return false;
       }
 
@@ -553,7 +705,7 @@ export default function Dashboard({
     // We process all transactions for the selected year range regardless of periodType state (as this is an annual matrix report)
     transactions.forEach((tx) => {
       // Filter by selected chapters
-      if (!selectedChapters.includes(tx.chapterId)) return;
+      if (!selectedFinancialUnitIds.includes(tx.financialUnitId || tx.chapterId)) return;
 
       // Exclude loans from standard financial matrix
       if (tx.type === HeadType.Loan) return;
@@ -587,21 +739,48 @@ export default function Dashboard({
     });
 
     return Object.values(headRowMap);
-  }, [transactions, selectedChapters, selectedYear, accountHeads]);
+  }, [transactions, selectedFinancialUnitIds, selectedYear, accountHeads]);
 
-  // Derived filtered collections for specific sheets
+  // Derived filtered collections for specific sheets.
+  // Loan disbursements are cash/bank outflows, so they belong in Payments alongside
+  // expenses; loan repayments are inflows and are surfaced in Receipts below. The
+  // Loan Registry tab still tracks the full lifecycle with outstanding balances.
   const filteredPayments = useMemo(() => {
     return detailedTransactions.filter((tx) =>
-      tx.type === HeadType.Expense &&
-      (selectedExpenseHeads.length === 0 || selectedExpenseHeads.includes(tx.headId))
+      (tx.type === HeadType.Expense &&
+        (selectedExpenseHeads.length === 0 || selectedExpenseHeads.includes(tx.headId))) ||
+      (tx.type === HeadType.Loan && selectedExpenseHeads.length === 0)
     );
   }, [detailedTransactions, selectedExpenseHeads]);
 
   const filteredReceipts = useMemo(() => {
-    return detailedTransactions.filter((tx) =>
+    const income = detailedTransactions.filter((tx) =>
       tx.type === HeadType.Income &&
       (selectedIncomeHeads.length === 0 || selectedIncomeHeads.includes(tx.headId))
     );
+
+    // Surface each repayment as its own receipt row, dated on the repayment.
+    const repayments =
+      selectedIncomeHeads.length === 0
+        ? detailedTransactions
+            .filter((tx) => tx.type === HeadType.Loan && (tx.amountReturned || 0) > 0)
+            .map((tx) => ({
+              ...tx,
+              id: `${tx.id}_repayment`,
+              date: tx.repaymentDate || tx.loanReturnedDate || tx.date,
+              headName: "Loan Repayment",
+              amount: tx.amountReturned || 0,
+              offeredAmount: tx.amount,
+              paidAmount: tx.amountReturned || 0,
+              balanceAmount: tx.loanBalance ?? tx.amount - (tx.amountReturned || 0),
+              paidBy: tx.paidToName || tx.paidTo,
+              collectedBy: tx.createdBy,
+              paymentMode: tx.repaymentPaymentMode || tx.paymentMode,
+              isLoanRepayment: true,
+            }))
+        : [];
+
+    return [...income, ...repayments].sort((a, b) => (a.date < b.date ? 1 : -1));
   }, [detailedTransactions, selectedIncomeHeads]);
 
   const filteredLoans = useMemo(() => {
@@ -624,7 +803,7 @@ export default function Dashboard({
   }, [chapterDirectory, selectedChapters]);
 
   const isChapterInScope = (chapterId?: string, chapterName?: string) =>
-    selectedChapters.includes(chapterId || "") ||
+    selectedFinancialUnitIds.includes(chapterId || "") ||
     allowedChapterDirectoryIds.has(chapterId || "") ||
     CHAPTERS.some(
       (chapter) => selectedChapters.includes(chapter.id) && chapter.name === chapterName
@@ -645,11 +824,11 @@ export default function Dashboard({
         m.email.toLowerCase().includes(term) ||
         m.mobileNumber.toLowerCase().includes(term)
     );
-  }, [members, searchTerm, selectedChapters, allowedChapterDirectoryIds]);
+  }, [members, searchTerm, selectedFinancialUnitIds, allowedChapterDirectoryIds]);
 
   const filteredAssets = useMemo(() => {
     const scopedAssets = assets.filter((asset) =>
-      isChapterInScope(asset.chapterIdInput, asset.chapterNameInput)
+      isChapterInScope(asset.financialUnitId || asset.chapterIdInput, asset.chapterNameInput)
     );
     if (!searchTerm.trim()) return scopedAssets;
     const term = searchTerm.toLowerCase();
@@ -661,11 +840,14 @@ export default function Dashboard({
         a.custodianName.toLowerCase().includes(term) ||
         a.chapterNameInput.toLowerCase().includes(term)
     );
-  }, [assets, searchTerm, selectedChapters, allowedChapterDirectoryIds]);
+  }, [assets, searchTerm, selectedFinancialUnitIds, allowedChapterDirectoryIds]);
 
   const filteredBankBalances = useMemo(() => {
-    const scopedBankBalances = bankBalances.filter((balance) =>
-      isChapterInScope(balance.chapterIdInput, balance.chapterNameInput)
+    // FD only — liquid bank balances are no longer tracked in this register.
+    const scopedBankBalances = bankBalances.filter(
+      (balance) =>
+        balance.amountType === "FD" &&
+        isChapterInScope(balance.financialUnitId || balance.chapterIdInput, balance.chapterNameInput)
     );
     if (!searchTerm.trim()) return scopedBankBalances;
     const term = searchTerm.toLowerCase();
@@ -675,7 +857,7 @@ export default function Dashboard({
         b.chapterIdInput.toLowerCase().includes(term) ||
         b.amountType.toLowerCase().includes(term)
     );
-  }, [bankBalances, searchTerm, selectedChapters, allowedChapterDirectoryIds]);
+  }, [bankBalances, searchTerm, selectedFinancialUnitIds, allowedChapterDirectoryIds]);
 
   const filteredChapters = useMemo(() => {
     const scopedChapters = chapterDirectory.filter((chapter) =>
@@ -702,7 +884,7 @@ export default function Dashboard({
     if (activeReportTab === "payments") {
       csvContent += "Sl. No.,Chapter ID Number,Chapter Name,Date,Paid By,Paid To,Accounts Head,Payable Amount,Paid Amount,Balance Amount,Mode of Payment,Remarks\n";
       filteredPayments.forEach((tx, idx) => {
-        csvContent += `${idx + 1},"${tx.chapterIdInput || tx.chapterId}","${tx.chapterNameInput || tx.chapterId}","${tx.date}","${tx.paidByExpense || tx.createdBy}","${tx.paidTo || ""}","${tx.headName}",${tx.payableAmount || tx.amount},${tx.paidAmount || tx.amount},${tx.balanceAmount || 0},"${tx.paymentMode || "Cash"}","${(tx.remarks || tx.description || "").replace(/"/g, '""')}"\n`;
+        csvContent += `${idx + 1},"${tx.chapterIdInput || tx.chapterId}","${tx.chapterNameInput || tx.chapterId}","${tx.date}","${tx.paidByExpense || tx.createdBy}","${tx.paidToName || tx.paidTo || ""}","${tx.type === HeadType.Loan ? "Loan" : tx.headName}",${tx.payableAmount || tx.amount},${tx.paidAmount || tx.amount},${tx.type === HeadType.Loan ? (tx.loanBalance || 0) : (tx.balanceAmount || 0)},"${tx.paymentMode || "Cash"}","${(tx.remarks || tx.description || "").replace(/"/g, '""')}"\n`;
       });
     } else if (activeReportTab === "receipts") {
       csvContent += "Sl. No.,Chapter ID No.,Chapter Name,Date,Collected By,Paid By Name,Accounts Head,Offered Amount,Paid Amount,Balance Amount,Payment Mode,Remarks,Paid By Member ID\n";
@@ -728,14 +910,14 @@ export default function Dashboard({
       csvContent += '4,"Local Chapter","Local grassroots operational chapter executing CME & finances"\n';
       csvContent += '5,"Sub-Committee","Specialized functional or project committee appointed by chapter"\n';
     } else if (activeReportTab === "assets") {
-      csvContent += "Sl. No.,Date,Chapter ID No.,Chapter Name,Asset Number/ID,Asset Name,Asset Purchase Date,Asset Value,Asset Category,Asset Life,Custodian Name\n";
+      csvContent += "Sl. No.,Date,Chapter ID No.,Chapter Name,Asset Number/ID,Asset Name,Asset Purchase Date,No. of Items,Price Per Item,Total Value,Payment Mode,Asset Category,Asset Life,Custodian Name,Depreciation Per Year,Net Amount,Remarks\n";
       filteredAssets.forEach((a, idx) => {
-        csvContent += `${idx + 1},"${a.date}","${a.chapterIdInput}","${a.chapterNameInput}","${a.assetId}","${a.assetName}","${a.purchaseDate}",${a.assetValue},"${a.category}",${a.assetLife},"${a.custodianName}"\n`;
+        csvContent += `${idx + 1},"${a.date}","${a.chapterIdInput}","${a.chapterNameInput}","${a.assetId}","${a.assetName}","${a.purchaseDate}",${a.quantity ?? 1},${a.assetValue},${a.totalValue ?? a.assetValue},"${a.paymentMode || ""}","${a.category}",${a.assetLife},"${a.custodianName}",${a.depreciationAmount ?? 0},${a.netAmount ?? a.totalValue ?? a.assetValue},"${a.remarks || ""}"\n`;
       });
     } else if (activeReportTab === "bank_balances") {
-      csvContent += "Sl. No.,Date,Chapter ID No.,Chapter Name,Amount Type,Balance Amount\n";
+      csvContent += "Sl. No.,Date,Chapter ID No.,Chapter Name,Bank Account Number,Bank Name,Bank Branch,Branch Address,Bank Contact,Deposited By,FD Amount,Maturity Date,Remarks\n";
       filteredBankBalances.forEach((b, idx) => {
-        csvContent += `${idx + 1},"${b.date}","${b.chapterIdInput}","${b.chapterNameInput}","${b.amountType}",${b.amount}\n`;
+        csvContent += `${idx + 1},"${b.date}","${b.chapterIdInput}","${b.chapterNameInput}","${b.bankAccountNumber || ""}","${b.bankName || ""}","${b.bankBranch || ""}","${(b.bankAddress || "").replace(/"/g, '""')}","${b.bankContactNumber || ""}","${b.depositedBy || ""}",${b.amount},"${b.maturityDate || ""}","${(b.remarks || "").replace(/"/g, '""')}"\n`;
       });
     } else if (activeReportTab === "chapters") {
       csvContent += "Sl. No.,Chapter ID,Chapter Name,State,District,Chapter Address,President ID,President Name,VP ID,VP Name,General Secretary ID,General Secretary Name,Treasurer ID,Treasurer Name,Contact No.,WhatsApp No.,Office No.,Email ID,Formation Date\n";
@@ -769,9 +951,38 @@ export default function Dashboard({
     document.body.removeChild(link);
   };
 
+  if (showReportWizard) {
+    return (
+      <div className="min-h-[70vh] animate-fadeIn">
+        <ReportWizard
+          currentUser={currentUser}
+          accountHeads={accountHeads}
+          transactions={transactions}
+          assets={assets}
+          bankBalances={bankBalances}
+          members={members}
+          scopeLabel={scopeLabel}
+          onClose={() => setShowReportWizard(false)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 font-sans">
       {/* 1. SELECTION FILTERS PANEL (Based on User's Org Level) */}
+      <button
+        type="button"
+        id="guided-report-button-top"
+        onClick={() => setShowReportWizard(true)}
+        className="w-full min-h-14 sm:min-h-16 bg-gradient-to-r from-[#0F6E5D] to-teal-700 hover:from-[#0B5548] hover:to-teal-800 text-white rounded-2xl px-5 py-4 shadow-sm flex items-center justify-between gap-4 cursor-pointer transition-colors"
+      >
+        <span className="flex items-center gap-3 text-left">
+          <span className="h-9 w-9 rounded-xl bg-white/15 border border-white/20 flex items-center justify-center"><Sparkles className="h-5 w-5" /></span>
+          <span><span className="block text-base sm:text-lg font-black">Specific report</span><span className="block text-xs text-teal-100 mt-0.5">Choose financial units, dates, and account heads.</span></span>
+        </span>
+        <ChevronRight className="h-5 w-5 shrink-0" />
+      </button>
       <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs" id="dashboard-filters-container">
         <div className="flex items-center gap-2 mb-4 text-emerald-950 font-bold text-base border-b border-slate-100 pb-3">
           {onBackToHome && <button type="button" onClick={onBackToHome} id="back-to-home-button" className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded-xl border border-slate-200" aria-label="Back to home"><ArrowLeft className="h-4 w-4" />Back to Home</button>}
@@ -780,113 +991,72 @@ export default function Dashboard({
         <div className="space-y-5">
           {/* A. Geographical / Organizational selections (Cascading) */}
           <div className="grid grid-cols-1 gap-4">
-            {/* National Level View: Select States */}
-            {currentUser.level === OrgLevel.National && (
-              <div className="space-y-2 border-b border-slate-100 pb-3" id="state-selector-wrapper">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">States (National View)</span>
-                  <div className="flex gap-2">
-                    <button onClick={selectAllStates} className="text-[10px] text-blue-600 font-bold hover:underline cursor-pointer">Select All</button>
-                    <span className="text-slate-300 text-xs">|</span>
-                    <button onClick={selectNoneStates} className="text-[10px] text-slate-500 hover:underline cursor-pointer">Deselect All</button>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {STATES.map((s) => {
-                    const isChecked = selectedStates.includes(s.id);
-                    return (
-                      <button
-                        key={s.id}
-                        id={`state-filter-${s.id}`}
-                        onClick={() => handleStateToggle(s.id)}
-                        className={`px-3 py-1.5 text-xs rounded-xl font-semibold border transition-all flex items-center gap-1.5 cursor-pointer ${
-                          isChecked
-                            ? "bg-blue-50/70 border-blue-500 text-blue-900 font-bold"
-                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                        }`}
-                      >
-                        {isChecked && <Check className="h-3 w-3" />}
-                        {s.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* National & State View: Select Districts */}
-            {(currentUser.level === OrgLevel.National || currentUser.level === OrgLevel.State) && (
-              <div className="space-y-2 border-b border-slate-100 pb-3" id="district-selector-wrapper">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-                    Districts ({currentUser.level === OrgLevel.State ? `${STATES.find(s => s.id === currentUser.nodeId)?.name || ""} State` : "National Filter"})
-                  </span>
-                  {(currentUser.level === OrgLevel.National || currentUser.level === OrgLevel.State) && (
-                    <button onClick={selectAllDistricts} className="text-[10px] text-blue-600 font-bold hover:underline cursor-pointer">Select All Districts</button>
-                  )}
-                </div>
-                {availableDistricts.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">Select a State above to load districts.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {availableDistricts.map((d) => {
-                      const isChecked = selectedDistricts.includes(d.id);
-                      return (
-                        <button
-                          key={d.id}
-                          id={`district-filter-${d.id}`}
-                          onClick={() => handleDistrictToggle(d.id)}
-                          className={`px-3 py-1.5 text-xs rounded-xl font-semibold border transition-all flex items-center gap-1.5 cursor-pointer ${
-                            isChecked
-                              ? "bg-blue-50/70 border-blue-500 text-blue-900 font-bold"
-                              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                          }`}
-                        >
-                          {isChecked && <Check className="h-3 w-3" />}
-                          {d.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Select Chapters (Visible on National, State, and District levels) */}
             {currentUser.level !== OrgLevel.Local && (
-              <div className="space-y-2" id="chapter-selector-wrapper">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-                    Local Chapters ({availableChapters.length} active)
-                  </span>
-                  <button onClick={selectAllChapters} className="text-[10px] text-blue-600 font-bold hover:underline cursor-pointer">Select All Chapters</button>
-                </div>
-                {availableChapters.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">Select a District above to load chapters.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1 bg-slate-50 border border-slate-200/60 rounded-xl">
-                    {availableChapters.map((c) => {
-                      const isChecked = selectedChapters.includes(c.id);
-                      const distName = DISTRICTS.find((d) => d.id === c.districtId)?.name || "";
-                      return (
-                        <button
-                          key={c.id}
-                          id={`chapter-filter-${c.id}`}
-                          onClick={() => handleChapterToggle(c.id)}
-                          className={`px-2.5 py-1 text-xs rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer ${
-                            isChecked
-                              ? "bg-blue-600 border-blue-600 text-white font-semibold"
-                              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                          }`}
-                        >
-                          {isChecked && <Check className="h-3 w-3 text-blue-200" />}
-                          <span>{c.name}</span>
-                          <span className={`text-[9px] ${isChecked ? "text-blue-100/80" : "text-slate-400"}`}>({distName})</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+              <div
+                ref={geoFilterRef}
+                id="geo-filter-row"
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 border-b border-slate-100 pb-4"
+              >
+                <button
+                  type="button"
+                  onClick={() => setIncludeOwnFinancialUnit((selected) => !selected)}
+                  className={`sm:col-span-2 lg:col-span-3 flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border text-left text-xs font-bold cursor-pointer ${includeOwnFinancialUnit ? "bg-teal-50 border-teal-300 text-teal-900" : "bg-white border-slate-300 text-slate-700 hover:border-teal-300"}`}
+                >
+                  <span>Include {getFinancialUnitName(userFinancialUnitId)}</span>
+                  <span className={`h-5 w-5 rounded-md border flex items-center justify-center ${includeOwnFinancialUnit ? "bg-[#0F6E5D] border-[#0F6E5D] text-white" : "border-slate-300"}`}>{includeOwnFinancialUnit && <Check className="h-3.5 w-3.5" />}</span>
+                </button>
+                {/* National Level View: Select States */}
+                {currentUser.level === OrgLevel.National && (
+                  <MultiSelectFilter
+                    label="States"
+                    wrapperId="state-selector-wrapper"
+                    idPrefix="state-filter"
+                    options={STATES.map((s) => ({ id: s.id, name: s.name }))}
+                    selectedIds={selectedStates}
+                    isOpen={openGeoFilter === "states"}
+                    onToggleOpen={() => toggleGeoFilter("states")}
+                    onToggleOption={handleStateToggle}
+                    onSelectAll={selectAllStates}
+                    onClear={selectNoneStates}
+                    emptyHint="No states available"
+                  />
                 )}
+
+                {/* National & State View: Select Districts */}
+                {(currentUser.level === OrgLevel.National || currentUser.level === OrgLevel.State) && (
+                  <MultiSelectFilter
+                    label="Districts"
+                    wrapperId="district-selector-wrapper"
+                    idPrefix="district-filter"
+                    options={availableDistricts.map((d) => ({ id: d.id, name: d.name }))}
+                    selectedIds={selectedDistricts}
+                    isOpen={openGeoFilter === "districts"}
+                    onToggleOpen={() => toggleGeoFilter("districts")}
+                    onToggleOption={handleDistrictToggle}
+                    onSelectAll={selectAllDistricts}
+                    onClear={selectNoneDistricts}
+                    emptyHint="Select a state first"
+                  />
+                )}
+
+                {/* Select Chapters (Visible on National, State, and District levels) */}
+                <MultiSelectFilter
+                  label="Local Chapters"
+                  wrapperId="chapter-selector-wrapper"
+                  idPrefix="chapter-filter"
+                  options={availableChapters.map((c) => ({
+                    id: c.id,
+                    name: c.name,
+                    hint: DISTRICTS.find((d) => d.id === c.districtId)?.name || "",
+                  }))}
+                  selectedIds={selectedChapters}
+                  isOpen={openGeoFilter === "chapters"}
+                  onToggleOpen={() => toggleGeoFilter("chapters")}
+                  onToggleOption={handleChapterToggle}
+                  onSelectAll={selectAllChapters}
+                  onClear={selectNoneChapters}
+                  emptyHint="Select a district first"
+                />
               </div>
             )}
 
@@ -1019,6 +1189,44 @@ export default function Dashboard({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* GUIDED REPORT ENTRY POINT */}
+      <div className="hidden" aria-hidden="true">
+        {false ? (
+          <ReportWizard
+            currentUser={currentUser}
+            accountHeads={accountHeads}
+            transactions={transactions}
+            assets={assets}
+            bankBalances={bankBalances}
+            members={members}
+            scopeLabel={scopeLabel}
+            onClose={() => setShowReportWizard(false)}
+          />
+        ) : (
+          <button
+            type="button"
+            id="guided-report-button-legacy"
+            onClick={() => setShowReportWizard(true)}
+            className="w-full flex items-center justify-between gap-3 text-left group cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-11 w-11 rounded-xl bg-[#0F6E5D] text-white flex items-center justify-center shrink-0 group-hover:bg-[#0B5548] transition-colors">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-900 group-hover:text-teal-900 transition-colors">
+                  Get a Specific Report
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Answer a few questions and we'll build exactly the report you need — then export it.
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-teal-600 group-hover:translate-x-1 transition-transform shrink-0" />
+          </button>
+        )}
       </div>
 
       {/* SECTION 1: SUMMARY */}
@@ -1185,8 +1393,18 @@ export default function Dashboard({
 
       {/* SECTION 2: DETAILED REPORTS */}
       <div className="space-y-4 pt-4 border-t border-slate-200">
-        <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+        <div className="flex justify-between items-center gap-3 border-b border-slate-200 pb-2">
           <h2 className="text-base font-bold text-emerald-950">Detailed Report</h2>
+          <button
+            type="button"
+            id="guided-report-button"
+            onClick={() => setShowReportWizard(true)}
+            className="hidden"
+            title="Build a report using guided choices"
+          >
+            <Sparkles className="h-4 w-4 text-teal-700" />
+            Specific report
+          </button>
         </div>
 
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center gap-3">
@@ -1227,7 +1445,7 @@ export default function Dashboard({
                   { id: "members" as ReportTab, label: "Member Doctor Directory", group: "Directories & Masters", icon: Users, count: `${filteredMembers.length} doctors` },
                   { id: "chapters" as ReportTab, label: "Chapter Master Directory", group: "Directories & Masters", icon: MapPin, count: `${filteredChapters.length} chapters` },
                   { id: "assets" as ReportTab, label: "Asset Register", group: "Directories & Masters", icon: Building2, count: `${filteredAssets.length} assets` },
-                  { id: "bank_balances" as ReportTab, label: "FD & Bank Accounts", group: "Directories & Masters", icon: Landmark, count: `${filteredBankBalances.length} accounts` },
+                  { id: "bank_balances" as ReportTab, label: "FD & Bank", group: "Directories & Masters", icon: Landmark, count: `${filteredBankBalances.length} FDs` },
                   { id: "entity_types" as ReportTab, label: "Entity Types Taxonomy", group: "Directories & Masters", icon: Layers, count: "5 Tiers" },
                   
                   { id: "monthly" as ReportTab, label: "Monthly Summary Aggregation", group: "Analytical Reports", icon: BarChart3, count: "12 Months" },
@@ -1394,12 +1612,23 @@ export default function Dashboard({
                             <td className="py-3 px-3 font-mono text-slate-600">{tx.chapterIdInput || tx.chapterId}</td>
                             <td className="py-3 px-3 font-semibold text-slate-800">{chapterName}</td>
                             <td className="py-3 px-3 font-mono text-slate-600 whitespace-nowrap">{tx.date ? formatDateDMY(tx.date) : "—"}</td>
-                            <td className="py-3 px-3 font-medium text-slate-700">{tx.paidByExpense || tx.createdBy}</td>
-                            <td className="py-3 px-3 font-medium text-slate-800">{tx.paidTo || "—"}</td>
-                            <td className="py-3 px-3 font-semibold text-rose-800">{tx.headName}</td>
+                            <td className="py-3 px-3 font-medium text-slate-700">{tx.paidByExpense || (tx.type === HeadType.Loan ? tx.chapterNameInput || tx.chapterId : tx.createdBy)}</td>
+                            <td className="py-3 px-3 font-medium text-slate-800">{tx.paidToName || tx.paidTo || "—"}</td>
+                            <td className="py-3 px-3">
+                              {tx.type === HeadType.Loan ? (
+                                <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide">
+                                  <Briefcase className="h-3 w-3" />
+                                  Loan
+                                </span>
+                              ) : (
+                                <span className="font-semibold text-rose-800">{tx.headName}</span>
+                              )}
+                            </td>
                             <td className="py-3 px-3 text-right font-medium text-slate-600">₹{(tx.payableAmount || tx.amount).toLocaleString()}</td>
                             <td className="py-3 px-3 text-right font-bold text-rose-900">₹{(tx.paidAmount || tx.amount).toLocaleString()}</td>
-                            <td className="py-3 px-3 text-right font-mono font-bold text-slate-600">₹{(tx.balanceAmount || 0).toLocaleString()}</td>
+                            <td className="py-3 px-3 text-right font-mono font-bold text-slate-600">
+                              {tx.type === HeadType.Loan ? `₹${(tx.loanBalance || 0).toLocaleString()}` : `₹${(tx.balanceAmount || 0).toLocaleString()}`}
+                            </td>
                             <td className="py-3 px-3">
                               <span className="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-full text-[10px] uppercase">
                                 {tx.paymentMode || "Cash"}
@@ -1489,7 +1718,16 @@ export default function Dashboard({
                             <td className="py-3 px-3 font-mono text-slate-600 whitespace-nowrap">{tx.date ? formatDateDMY(tx.date) : "—"}</td>
                             <td className="py-3 px-3 font-medium text-slate-700">{tx.collectedBy || tx.createdBy}</td>
                             <td className="py-3 px-3 font-semibold text-slate-800">{tx.paidBy || "—"}</td>
-                            <td className="py-3 px-3 font-semibold text-blue-800">{tx.headName}</td>
+                            <td className="py-3 px-3">
+                              {(tx as any).isLoanRepayment ? (
+                                <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide">
+                                  <Briefcase className="h-3 w-3" />
+                                  Loan Repayment
+                                </span>
+                              ) : (
+                                <span className="font-semibold text-blue-800">{tx.headName}</span>
+                              )}
+                            </td>
                             <td className="py-3 px-3 text-right font-medium text-slate-600">₹{(tx.offeredAmount || tx.amount).toLocaleString()}</td>
                             <td className="py-3 px-3 text-right font-bold text-blue-900">₹{(tx.paidAmount || tx.amount).toLocaleString()}</td>
                             <td className="py-3 px-3 text-right font-mono font-bold text-slate-600">₹{(tx.balanceAmount || 0).toLocaleString()}</td>
@@ -1784,16 +2022,22 @@ export default function Dashboard({
                       <th className="py-2.5 px-3">Asset ID</th>
                       <th className="py-2.5 px-3">Asset Name</th>
                       <th className="py-2.5 px-3">Purchase Date</th>
-                      <th className="py-2.5 px-3 text-right">Asset Value (₹)</th>
+                      <th className="py-2.5 px-3 text-right">No. of Items</th>
+                      <th className="py-2.5 px-3 text-right">Price / Item (₹)</th>
+                      <th className="py-2.5 px-3 text-right">Total Value (₹)</th>
+                      <th className="py-2.5 px-3">Payment Mode</th>
                       <th className="py-2.5 px-3">Category</th>
                       <th className="py-2.5 px-3 text-right">Life (Years)</th>
                       <th className="py-2.5 px-3">Custodian Name</th>
+                      <th className="py-2.5 px-3 text-right">Deprec. / Year (₹)</th>
+                      <th className="py-2.5 px-3 text-right">Net Amount (₹)</th>
+                      <th className="py-2.5 px-3">Remarks</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     {filteredAssets.length === 0 ? (
                       <tr>
-                        <td colSpan={11} className="py-8 text-center text-slate-400">
+                        <td colSpan={17} className="py-8 text-center text-slate-400">
                           No asset entries match the search parameters.
                         </td>
                       </tr>
@@ -1807,10 +2051,22 @@ export default function Dashboard({
                           <td className="py-3 px-3 font-mono font-bold text-amber-800">{a.assetId}</td>
                           <td className="py-3 px-3 font-bold text-slate-900">{a.assetName}</td>
                           <td className="py-3 px-3 font-mono text-slate-600 whitespace-nowrap">{a.purchaseDate ? formatDateDMY(a.purchaseDate) : "—"}</td>
-                          <td className="py-3 px-3 text-right font-black text-slate-900">₹{a.assetValue.toLocaleString()}</td>
+                          <td className="py-3 px-3 text-right font-mono font-bold text-slate-700">{a.quantity ?? 1}</td>
+                          <td className="py-3 px-3 text-right font-semibold text-slate-700">₹{a.assetValue.toLocaleString()}</td>
+                          <td className="py-3 px-3 text-right font-black text-slate-900">₹{(a.totalValue ?? a.assetValue).toLocaleString()}</td>
+                          <td className="py-3 px-3">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              a.paymentMode === "Bank" ? "bg-sky-50 text-sky-800 border border-sky-200" : "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                            }`}>
+                              {a.paymentMode || "—"}
+                            </span>
+                          </td>
                           <td className="py-3 px-3 font-semibold text-blue-700">{a.category}</td>
                           <td className="py-3 px-3 text-right font-mono font-bold text-slate-700">{a.assetLife}</td>
                           <td className="py-3 px-3 font-medium text-slate-800">{a.custodianName}</td>
+                          <td className="py-3 px-3 text-right font-bold text-rose-700">₹{(a.depreciationAmount ?? 0).toLocaleString()}</td>
+                          <td className="py-3 px-3 text-right font-black text-sky-800">₹{(a.netAmount ?? a.totalValue ?? a.assetValue).toLocaleString()}</td>
+                          <td className="py-3 px-3 text-slate-600 italic">{a.remarks || "—"}</td>
                         </tr>
                       ))
                     )}
@@ -1820,7 +2076,7 @@ export default function Dashboard({
             </div>
           )}
 
-          {/* SHEET 7: FD & BANK BALANCES */}
+          {/* SHEET 7: FD REGISTER */}
           {activeReportTab === "bank_balances" && (
             <div className="space-y-4">
               <div className="border border-slate-200 rounded-xl overflow-x-auto">
@@ -1831,15 +2087,22 @@ export default function Dashboard({
                       <th className="py-2.5 px-4">Date</th>
                       <th className="py-2.5 px-4">Chapter ID</th>
                       <th className="py-2.5 px-4">Chapter Name</th>
-                      <th className="py-2.5 px-4">Amount Type</th>
-                      <th className="py-2.5 px-4 text-right">Balance Amount (₹)</th>
+                      <th className="py-2.5 px-4">Bank Account No.</th>
+                      <th className="py-2.5 px-4">Bank Name</th>
+                      <th className="py-2.5 px-4">Bank Branch</th>
+                      <th className="py-2.5 px-4">Branch Address</th>
+                      <th className="py-2.5 px-4">Bank Contact</th>
+                      <th className="py-2.5 px-4">Deposited By</th>
+                      <th className="py-2.5 px-4 text-right">FD Amount (₹)</th>
+                      <th className="py-2.5 px-4">Maturity Date</th>
+                      <th className="py-2.5 px-4">Remarks</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     {filteredBankBalances.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="py-8 text-center text-slate-400">
-                          No bank balance records match the search parameters.
+                        <td colSpan={13} className="py-8 text-center text-slate-400">
+                          No FD records match the search parameters.
                         </td>
                       </tr>
                     ) : (
@@ -1849,14 +2112,15 @@ export default function Dashboard({
                           <td className="py-3 px-4 font-mono text-slate-600 whitespace-nowrap">{b.date ? formatDateDMY(b.date) : "—"}</td>
                           <td className="py-3 px-4 font-mono text-slate-600">{b.chapterIdInput}</td>
                           <td className="py-3 px-4 font-semibold text-slate-800">{b.chapterNameInput}</td>
-                          <td className="py-3 px-4">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                              b.amountType === "FD" ? "bg-amber-50 text-amber-800 border border-amber-200" : "bg-sky-50 text-sky-800 border border-sky-200"
-                            }`}>
-                              {b.amountType}
-                            </span>
-                          </td>
+                          <td className="py-3 px-4 font-mono text-slate-700">{b.bankAccountNumber || "—"}</td>
+                          <td className="py-3 px-4 font-semibold text-slate-800">{b.bankName || "—"}</td>
+                          <td className="py-3 px-4 text-slate-700">{b.bankBranch || "—"}</td>
+                          <td className="py-3 px-4 text-slate-600 text-[11px]">{b.bankAddress || "—"}</td>
+                          <td className="py-3 px-4 text-slate-600">{b.bankContactNumber || "—"}</td>
+                          <td className="py-3 px-4 font-medium text-slate-800">{b.depositedBy || "—"}</td>
                           <td className="py-3 px-4 text-right font-black text-slate-900 text-sm">₹{b.amount.toLocaleString()}</td>
+                          <td className="py-3 px-4 font-mono text-slate-600 whitespace-nowrap">{b.maturityDate ? formatDateDMY(b.maturityDate) : "—"}</td>
+                          <td className="py-3 px-4 text-slate-600 italic">{b.remarks || "—"}</td>
                         </tr>
                       ))
                     )}
@@ -2155,6 +2419,31 @@ export default function Dashboard({
     </div>
 
       {/* LOAN REPAYMENT MODAL */}
+      {showReportWizard && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 p-3 sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Specific report builder"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setShowReportWizard(false);
+          }}
+        >
+          <div className="w-full max-w-6xl my-3 sm:my-8">
+            <ReportWizard
+              currentUser={currentUser}
+              accountHeads={accountHeads}
+              transactions={transactions}
+              assets={assets}
+              bankBalances={bankBalances}
+              members={members}
+              scopeLabel={scopeLabel}
+              onClose={() => setShowReportWizard(false)}
+            />
+          </div>
+        </div>
+      )}
+
       {repayModalTx && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden">
