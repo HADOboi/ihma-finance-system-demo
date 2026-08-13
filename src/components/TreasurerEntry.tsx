@@ -112,23 +112,15 @@ export default function TreasurerEntry({
     "BHMS",
     "MD (Homeo)",
     "DHMS",
-    "MBBS",
-    "BAMS",
-    "BDS",
-    "BUMS",
-    "BNYS",
     "MD (General)",
     "MS",
     "PhD",
-    "DNB",
     "Fellowship",
-    "Diploma in Homoeopathy",
     "MPH (Public Health)",
     "MBA (Hospital Mgmt)",
-    "M.Sc",
-    "LLB",
-    "MA",
     "B.Sc",
+    "M.Sc",
+    "Others (specify)"
   ];
 
   const MEDICAL_COUNCIL_OPTIONS = [
