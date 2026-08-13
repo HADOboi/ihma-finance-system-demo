@@ -12,4 +12,8 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // On Vercel, build with the nitro `vercel` preset so the output lands in
+  // .vercel/output (Build Output API). Locally / on Lovable this stays default.
+  ...(process.env["VERCEL"] ? { nitro: { preset: "vercel" } } : {}),
 });
+
