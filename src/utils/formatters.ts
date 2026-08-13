@@ -38,14 +38,24 @@ export function formatDateDMY(dateStr?: string | null): string {
 }
 
 /**
- * Formats a currency number in INR (e.g. ₹ 1,50,000)
+ * Formats a currency number in INR with 2 decimals (e.g. ₹ 1,50,000.00)
  */
 export function formatINR(amount: number): string {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(amount);
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+/**
+ * Parses a user-entered amount string into a 2-decimal number.
+ */
+export function parseAmount(value: string | number): number {
+  const num = typeof value === "number" ? value : parseFloat(String(value).replace(/[^0-9.-]/g, ""));
+  if (!Number.isFinite(num)) return 0;
+  return Number(num.toFixed(2));
 }
 
 /**

@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 import { User, AccountHead, Transaction, OrgLevel, UserRole, HeadType, Asset, BankBalance, ChapterMaster, Member, ReportTab } from "./types";
 import { loadDatabase, saveDatabase, resetToDefaults, CHAPTERS } from "./mockData";
 import { ensureDoctorPrefix } from "./utils/formatters";
-import { getFinancialUnitName, getUserFinancialUnitId, isWritableFinancialUnit } from "./utils/financialUnits";
+import { getChapterCode, getFinancialUnitName, getUserFinancialUnitId, isWritableFinancialUnit } from "./utils/financialUnits";
 import Login from "./components/Login";
 import TreasurerEntry from "./components/TreasurerEntry";
 import AdminPanel from "./components/AdminPanel";
@@ -97,6 +97,10 @@ export default function App() {
     setCurrentView("reports");
   };
 
+  // Manual entries must carry the official chapter code (e.g. KL-EK-CO01) like seeded rows do,
+  // not the internal slug ("cochin"). Resolve it from the chapter directory by name.
+  const resolveChapterCode = (financialUnitId: string) => getChapterCode(financialUnitId);
+
   // 1. Record Transaction (Local Treasurer Mode)
   const handleAddTransaction = (
     newTx: Omit<Transaction, "id" | "createdBy" | "createdAt" | "chapterId" | "headName">
@@ -114,7 +118,7 @@ export default function App() {
       headName: newTx.type === HeadType.Loan ? "Loan" : (selectedHead ? selectedHead.name : ""),
       chapterId: financialUnitId,
       financialUnitId,
-      chapterIdInput: financialUnitId,
+      chapterIdInput: resolveChapterCode(financialUnitId),
       chapterNameInput: getFinancialUnitName(financialUnitId),
       createdBy: currentUser.username,
       createdAt: new Date().toISOString(),
@@ -177,7 +181,7 @@ export default function App() {
     if (!isWritableFinancialUnit(currentUser, financialUnitId)) return;
     const id = `ast_${Date.now()}`;
     const slNo = db.assets.length + 1;
-    const fullAsset: Asset = { ...newAsset, id, slNo, financialUnitId, chapterIdInput: financialUnitId, chapterNameInput: getFinancialUnitName(financialUnitId) };
+    const fullAsset: Asset = { ...newAsset, id, slNo, financialUnitId, chapterIdInput: resolveChapterCode(financialUnitId), chapterNameInput: getFinancialUnitName(financialUnitId) };
 
     // An asset purchase is real money leaving the chapter, so mirror it as a capital
     // expense. Without this the Asset Register and the cash/bank totals disagree.
@@ -197,7 +201,7 @@ export default function App() {
       paidTo: newAsset.assetName,
       chapterId: financialUnitId,
       financialUnitId,
-      chapterIdInput: financialUnitId,
+      chapterIdInput: resolveChapterCode(financialUnitId),
       chapterNameInput: getFinancialUnitName(financialUnitId),
       assetRef: newAsset.assetId,
       description: `Asset purchase: ${newAsset.assetName} (${newAsset.assetId})`,
@@ -225,7 +229,7 @@ export default function App() {
     if (!isWritableFinancialUnit(currentUser, financialUnitId)) return;
     const id = `bal_${Date.now()}`;
     const slNo = db.bankBalances.length + 1;
-    const fullBalance: BankBalance = { ...newBalance, id, slNo, financialUnitId, chapterIdInput: financialUnitId, chapterNameInput: getFinancialUnitName(financialUnitId) };
+    const fullBalance: BankBalance = { ...newBalance, id, slNo, financialUnitId, chapterIdInput: resolveChapterCode(financialUnitId), chapterNameInput: getFinancialUnitName(financialUnitId) };
 
     syncDatabase({
       ...db,
@@ -658,8 +662,8 @@ export default function App() {
       {/* Humble Footer */}
       <footer className="bg-white border-t border-slate-200/80 py-6 mt-12 text-center text-xs text-slate-400 font-medium">
         <p>© 2026 Indian Homeopathic Medical Association. All rights reserved.</p>
-        <p className="mt-1 flex items-center justify-center gap-1 font-mono text-[10px] text-slate-350">
-          <Sparkles className="h-3 w-3" /> IHMA Ledger system designed & deployed for localized secure demonstrations.
+        <p className="mt-1 flex items-center justify-center gap-1 font-mono text-[10px] text-slate-400">
+          <Sparkles className="h-3 w-3" /> Developed by SAMFI Digital Solutions
         </p>
       </footer>
     </div>

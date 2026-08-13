@@ -18,7 +18,8 @@ import {
 } from "../types";
 import { CHAPTERS } from "../mockData";
 import { formatDateDMY, formatINR, ensureDoctorPrefix } from "../utils/formatters";
-import { getFinancialUnitName, getUserFinancialUnitId } from "../utils/financialUnits";
+import { getChapterCode, getFinancialUnitName, getUserFinancialUnitId } from "../utils/financialUnits";
+import AmountInput from "./AmountInput";
 import {
   ArrowLeft,
   Check,
@@ -136,22 +137,49 @@ export default function TreasurerEntry({
   ];
 
   const INDIAN_STATES = [
-    "Kerala",
-    "Tamil Nadu",
-    "Karnataka",
-    "Maharashtra",
-    "Delhi",
+    "Andaman and Nicobar Islands",
     "Andhra Pradesh",
-    "Telangana",
-    "West Bengal",
+    "Arunachal Pradesh",
+    "Assam",
+    "Bihar",
+    "Chandigarh",
+    "Chhattisgarh",
+    "Dadra and Nagar Haveli and Daman and Diu",
+    "Delhi",
+    "Goa",
     "Gujarat",
+    "Haryana",
+    "Himachal Pradesh",
+    "Jammu and Kashmir",
+    "Jharkhand",
+    "Karnataka",
+    "Kerala",
+    "Ladakh",
+    "Lakshadweep",
+    "Madhya Pradesh",
+    "Maharashtra",
+    "Manipur",
+    "Meghalaya",
+    "Mizoram",
+    "Nagaland",
+    "Odisha",
+    "Puducherry",
+    "Punjab",
+    "Rajasthan",
+    "Sikkim",
+    "Tamil Nadu",
+    "Telangana",
+    "Tripura",
     "Uttar Pradesh",
-    "Other State",
+    "Uttarakhand",
+    "West Bengal",
   ];
 
   // Populate data when editing an existing transaction
   useEffect(() => {
     if (editingTransaction) {
+      // Strip the RV-/PV-/LV- prefix so the manual voucher number step shows only the typed suffix
+      const stripVoucherPrefix = (v?: string) => (v ? v.replace(/^(RV|PV|LV)-/i, "") : "");
       if (editingTransaction.type === HeadType.Income) {
         setActiveWizard("income");
         setFormData({
@@ -165,7 +193,7 @@ export default function TreasurerEntry({
           paymentMode: editingTransaction.paymentMode || null, // NO PREFILLED DEFAULT
           offeredAmount: editingTransaction.offeredAmount || editingTransaction.amount,
           paidAmount: editingTransaction.paidAmount || editingTransaction.amount,
-          voucherNumber: editingTransaction.voucherNumber || "RV-101",
+          voucherNumber: stripVoucherPrefix(editingTransaction.voucherNumber),
           date: editingTransaction.date || new Date().toISOString().slice(0, 10),
           remarks: editingTransaction.description || "",
         });
@@ -181,7 +209,7 @@ export default function TreasurerEntry({
           paymentMode: editingTransaction.paymentMode || null, // NO PREFILLED DEFAULT
           payableAmount: editingTransaction.payableAmount || editingTransaction.amount,
           paidAmount: editingTransaction.paidAmount || editingTransaction.amount,
-          voucherNumber: editingTransaction.voucherNumber || "PV-201",
+          voucherNumber: stripVoucherPrefix(editingTransaction.voucherNumber),
           date: editingTransaction.date || new Date().toISOString().slice(0, 10),
           remarks: editingTransaction.description || "",
         });
@@ -197,7 +225,7 @@ export default function TreasurerEntry({
           targetReturnDate: editingTransaction.loanReturnDate || new Date().toISOString().slice(0, 10),
           particulars: editingTransaction.particulars || "",
           remarks: editingTransaction.remarks || "",
-          voucherNumber: editingTransaction.voucherNumber || "LV-301",
+          voucherNumber: stripVoucherPrefix(editingTransaction.voucherNumber),
           date: editingTransaction.date || new Date().toISOString().slice(0, 10),
         });
       }
@@ -205,12 +233,6 @@ export default function TreasurerEntry({
       setIsSuccess(false);
     }
   }, [editingTransaction]);
-
-  // Format INR currency
-  const formatINR = (n: number | string) => {
-    const num = Number(n) || 0;
-    return "₹" + num.toLocaleString("en-IN");
-  };
 
   // Capital asset categories offered in the asset register dropdown
   const ASSET_CATEGORIES = [
@@ -272,7 +294,7 @@ export default function TreasurerEntry({
         paymentMode: null, // Explicit tap required!
         offeredAmount: 0,
         paidAmount: 0,
-        voucherNumber: `RV-${Math.floor(100 + Math.random() * 900)}`,
+        voucherNumber: "",
         date: todayStr,
         remarks: "",
       });
@@ -287,7 +309,7 @@ export default function TreasurerEntry({
         paymentMode: null, // Explicit tap required!
         payableAmount: 0,
         paidAmount: 0,
-        voucherNumber: `PV-${Math.floor(100 + Math.random() * 900)}`,
+        voucherNumber: "",
         date: todayStr,
         remarks: "",
       });
@@ -304,7 +326,7 @@ export default function TreasurerEntry({
         loanAmount: 0,
         targetReturnDate: todayStr,
         remarks: "",
-        voucherNumber: `LV-${Math.floor(100 + Math.random() * 900)}`,
+        voucherNumber: "",
       });
     } else if (type === "loans_dashboard") {
       setFormData({});
@@ -349,7 +371,6 @@ export default function TreasurerEntry({
       setQualSearchTerm("");
     } else if (type === "asset") {
       setFormData({
-        date: todayStr,
         assetName: "",
         category: null,
         chapterId: defaultChapterId,
@@ -361,6 +382,7 @@ export default function TreasurerEntry({
         paymentMode: null, // STRICT NO-DEFAULT RULE
         assetLife: 0,
         custodianName: "", // NO PREFILL
+        custodianMemberId: "",
         remarks: "",
       });
     } else if (type === "bank_balance") {
@@ -369,10 +391,12 @@ export default function TreasurerEntry({
         chapterId: defaultChapterId,
         chapterName: defaultChapterName,
         depositedBy: "", // NO PREFILL
+        depositedByMemberId: "",
         amount: 0,
         interestAmount: 0,
         remarks: "",
         date: todayStr,
+        fdTermYears: "",
         maturityDate: "",
         bankName: "",
         bankBranch: "",
@@ -423,6 +447,7 @@ export default function TreasurerEntry({
         { id: "remarks", title: "Enter Remarks / Notes", sub: "Optional additional notes for this receipt." },
         { id: "collected_by", title: "Who collected this income?", sub: "Search doctor name or choose guest/non-registered option." },
         { id: "paid_by", title: "Who paid this amount?", sub: "Search IHMA member doctor (stores Member ID) or select guest." },
+        { id: "voucher_number", title: "Voucher Number", sub: "Enter the Receipt Voucher (RV) number for this transaction." },
         { id: "review", title: "Review & Save Receipt Entry", sub: "Verify all receipt details and auto-fetched chapter ID before saving." }
       );
       return steps;
@@ -462,6 +487,7 @@ export default function TreasurerEntry({
         { id: "remarks", title: "Enter Remarks / Notes", sub: "Optional additional notes for this expense." },
         { id: "paid_by", title: "Who paid this expense?", sub: "Search doctor, treasurer, or enter payer name." },
         { id: "paid_to", title: "Who was this paid to?", sub: "Search payee doctor, vendor, or enter custom party name." },
+        { id: "voucher_number", title: "Voucher Number", sub: "Enter the Payment Voucher (PV) number for this transaction." },
         { id: "review", title: "Review & Save Expense Entry", sub: "Verify all voucher details and auto-fetched chapter ID before saving." }
       );
       return steps;
@@ -476,6 +502,7 @@ export default function TreasurerEntry({
         { id: "amount", title: "Loan Amount", sub: "Specify principal sum disbursed." },
         { id: "remarks", title: "Remarks / Notes", sub: "Optional notes for this loan voucher." },
         { id: "loan_return_date", title: "Agreed Return Date", sub: "Set expected repayment deadline date." },
+        { id: "voucher_number", title: "Voucher Number", sub: "Enter the Loan Voucher (LV) number for this transaction." },
         { id: "review", title: "Review & Register Loan", sub: "Audit loan parameters before confirming." },
       ];
     }
@@ -492,17 +519,15 @@ export default function TreasurerEntry({
 
     if (activeWizard === "asset") {
       return [
-        { id: "asset_date", title: "Select Entry Date", sub: "Date this asset is being recorded in the register." },
-        { id: "asset_name", title: "Asset Name", sub: "Identify the physical capital asset." },
         { id: "asset_purchase_date", title: "Asset Purchase Date", sub: "Date the asset was originally purchased." },
+        { id: "asset_category", title: "Asset Category", sub: "Select the capital asset category." },
+        { id: "asset_name", title: "Asset Name", sub: "Identify the physical capital asset." },
         { id: "asset_quantity", title: "Number of Items", sub: "How many identical items were purchased." },
         { id: "asset_value", title: "Asset Value", sub: "Price of a single item; total is auto-calculated." },
         { id: "asset_payment_mode", title: "Mode of Payment", sub: "How this asset was paid for." },
-        { id: "asset_remarks", title: "Remarks / Notes", sub: "Optional notes for this asset record." },
-        { id: "asset_category", title: "Asset Category", sub: "Select the capital asset category." },
         { id: "asset_life", title: "Asset Life", sub: "Useful life in years; drives annual depreciation." },
         { id: "asset_custodian", title: "Custodian Name", sub: "Person responsible for this asset." },
-        { id: "asset_depreciation", title: "Depreciation Summary", sub: "Straight-line depreciation, auto-calculated." },
+        { id: "asset_remarks", title: "Remarks / Notes", sub: "Optional notes for this asset record." },
         { id: "review", title: "Review & Save Asset Entry", sub: "Confirm asset register record before saving." },
       ];
     }
@@ -524,7 +549,7 @@ export default function TreasurerEntry({
         { id: "fd_date", title: "Select Date", sub: "Date the fixed deposit was opened." },
         { id: "fd_amount_type", title: "Amount Type", sub: "Fixed deposit or bank interest received." },
         { id: "balance_amount", title: "FD Amount", sub: "Principal deposited in INR." },
-        { id: "fd_maturity_date", title: "FD Maturity Date", sub: "Date on which this fixed deposit matures." },
+        { id: "fd_term", title: "FD Term & Maturity Date", sub: "FD term in years and auto-computed maturity date." },
         { id: "fd_bank_details", title: "Bank Details", sub: "Account number, bank, branch, branch address and contact number." },
         { id: "fd_remarks", title: "Remarks / Notes", sub: "Optional notes for this deposit." },
         { id: "review", title: "Review & Save FD Entry", sub: "Confirm fixed deposit record." },
@@ -576,6 +601,7 @@ export default function TreasurerEntry({
       return true;
     }
     if (sId === "remarks") return true; // Optional
+    if (sId === "voucher_number") return !!formData.voucherNumber && !!formData.voucherNumber.trim();
 
     if (sId === "recipient_type") return !!formData.recipientType;
     if (sId === "recipient_select" || (activeWizard === "loan" && sId === "paid_to")) {
@@ -599,7 +625,6 @@ export default function TreasurerEntry({
     if (sId === "member_practice") return true;
     if (sId === "member_contact") return !!formData.mobileNumber?.trim();
 
-    if (sId === "asset_date") return !!formData.date;
     if (sId === "asset_name") return !!formData.assetName?.trim();
     if (sId === "asset_purchase_date") return !!formData.purchaseDate;
     if (sId === "asset_quantity") return Number(formData.quantity) > 0;
@@ -616,7 +641,7 @@ export default function TreasurerEntry({
     if (sId === "balance_amount") return formData.amount > 0;
     if (sId === "fd_interest_amount") return Number(formData.interestAmount) > 0;
     if (sId === "fd_remarks") return true; // Optional
-    if (sId === "fd_maturity_date") return !!formData.maturityDate;
+    if (sId === "fd_term") return !!formData.fdTermYears;
     if (sId === "fd_bank_details") return !!formData.bankName?.trim();
 
     if (sId === "review") {
@@ -655,7 +680,7 @@ export default function TreasurerEntry({
         type: HeadType.Income,
         headId: formData.category || "head_inc",
         amount: Number(formData.paidAmount),
-        voucherNumber: formData.voucherNumber,
+        voucherNumber: `RV-${formData.voucherNumber}`,
         chapterIdInput: formData.chapterId || defaultChapterId,
         chapterNameInput: formData.chapterName || defaultChapterName,
         collectedBy: formData.collectedBy || "Guest",
@@ -692,7 +717,7 @@ export default function TreasurerEntry({
         type: HeadType.Expense,
         headId: formData.category || "head_exp",
         amount: Number(formData.paidAmount),
-        voucherNumber: formData.voucherNumber,
+        voucherNumber: `PV-${formData.voucherNumber}`,
         chapterIdInput: formData.chapterId || defaultChapterId,
         chapterNameInput: formData.chapterName || defaultChapterName,
         paidByExpense: formData.paidBy || currentUser.name,
@@ -717,7 +742,7 @@ export default function TreasurerEntry({
         type: HeadType.Loan,
         headId: "loan",
         amount: Number(formData.loanAmount),
-        voucherNumber: formData.voucherNumber,
+        voucherNumber: `LV-${formData.voucherNumber}`,
         chapterIdInput: formData.chapterId || defaultChapterId,
         chapterNameInput: formData.chapterName || defaultChapterName,
         paidToCategory: "chapter" as const,
@@ -782,7 +807,7 @@ export default function TreasurerEntry({
       });
     } else if (activeWizard === "asset" && onAddAsset) {
       onAddAsset({
-        date: formData.date || todayStr,
+        date: formData.purchaseDate || todayStr,
         chapterIdInput: formData.chapterId,
         chapterNameInput: formData.chapterName,
         assetId: formData.assetNumber || generateAssetNumber(),
@@ -873,9 +898,13 @@ export default function TreasurerEntry({
       m.memberId.toLowerCase().includes(memberSearchTerm.toLowerCase())
   );
 
-  // Filter chapters for loan picker
-  const filteredChapters = chapterDirectory.filter((c) =>
-    c.chapterName.toLowerCase().includes(memberSearchTerm.toLowerCase())
+  // Filter chapters for loan picker (own chapter can never borrow from itself)
+  const filteredChapters = chapterDirectory.filter(
+    (c) =>
+      c.id !== defaultChapterId &&
+      c.chapterName.trim().toLowerCase() !== defaultChapterName.trim().toLowerCase() &&
+      c.id !== getChapterCode(defaultChapterId) &&
+      c.chapterName.toLowerCase().includes(memberSearchTerm.toLowerCase())
   );
 
   return (
@@ -1050,14 +1079,6 @@ export default function TreasurerEntry({
                 <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
               </div>
             </button>
-          </div>
-
-          {/* Audit Rule Reminder */}
-          <div className="bg-slate-100/80 p-4 rounded-xl border border-slate-200 text-slate-600 text-xs flex items-center gap-3">
-            <ShieldCheck className="h-5 w-5 text-teal-700 shrink-0" />
-            <p className="leading-relaxed">
-              <strong className="text-slate-800 font-bold">Audit Rule:</strong> No free-typing where a selection will do. No prefilled defaults. Explicit tap decisions enforce accuracy during financial audits across 80+ chapters.
-            </p>
           </div>
         </div>
       )}
@@ -1371,16 +1392,9 @@ export default function TreasurerEntry({
                   </label>
                   <div className="relative">
                     <span className="absolute left-4 top-3.5 text-xl font-bold text-slate-400">₹</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max={
-                        selectedLoan.loanBalance !== undefined
-                          ? selectedLoan.loanBalance
-                          : selectedLoan.amount - (selectedLoan.amountReturned || 0)
-                      }
-                      value={repaymentAmount || ""}
-                      onChange={(e) => setRepaymentAmount(Number(e.target.value))}
+                    <AmountInput
+                      value={repaymentAmount}
+                      onValueChange={(v) => setRepaymentAmount(v)}
                       className="w-full pl-9 pr-4 py-3 border border-slate-300 rounded-xl text-2xl font-bold font-display text-indigo-950 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       placeholder="0"
                     />
@@ -2082,7 +2096,7 @@ export default function TreasurerEntry({
                         ].map((tier) => (
                           <div
                             key={tier.key}
-                            onClick={() => setFormData({ ...formData, membershipTier: tier.key })}
+                            onClick={() => setFormData({ ...formData, membershipTier: tier.key, offeredAmount: tier.key.startsWith("Silver") ? 400 : tier.key.startsWith("Gold") ? 4000 : tier.key.startsWith("Platinum") ? 7000 : formData.offeredAmount })}
                             className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                               formData.membershipTier === tier.key
                                 ? "border-[#0F6E5D] bg-[#E4F1EE]"
@@ -2136,21 +2150,15 @@ export default function TreasurerEntry({
                       <div className="space-y-4">
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                            Amount Offered / Expected
+                            Receivable Amount
                           </label>
                           <div className="flex items-center gap-2">
                             <span className="text-lg font-bold text-slate-500">₹</span>
-                            <input
-                              type="number"
-                              min="0"
-                              value={formData.offeredAmount || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  offeredAmount: Number(e.target.value),
-                                })
-                              }
-                              className="w-full text-2xl font-bold font-display text-slate-900 bg-transparent focus:outline-hidden"
+                            <AmountInput
+                              readOnly={formData.category === "membership"}
+                              value={formData.offeredAmount}
+                              onValueChange={(v) => setFormData({ ...formData, offeredAmount: v })}
+                              className="w-full text-2xl font-bold font-display text-slate-900 bg-transparent focus:outline-hidden disabled:opacity-70"
                               placeholder="0"
                             />
                           </div>
@@ -2173,15 +2181,13 @@ export default function TreasurerEntry({
 
                         <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200">
                           <label className="block text-xs font-bold text-emerald-900 uppercase tracking-wider mb-1">
-                            Amount Actually Received
+                            Received Amount
                           </label>
                           <div className="flex items-center gap-2">
                             <span className="text-lg font-bold text-emerald-700">₹</span>
-                            <input
-                              type="number"
-                              min="0"
-                              value={formData.paidAmount || ""}
-                              onChange={(e) => setFormData({ ...formData, paidAmount: Number(e.target.value) })}
+                            <AmountInput
+                              value={formData.paidAmount}
+                              onValueChange={(v) => setFormData({ ...formData, paidAmount: v })}
                               className="w-full text-2xl font-bold font-display text-emerald-950 bg-transparent focus:outline-hidden"
                               placeholder="0"
                             />
@@ -2270,6 +2276,31 @@ export default function TreasurerEntry({
                       </div>
                     )}
 
+
+                    {/* Step: Voucher Number */}
+                    {currentStepConfig.id === "voucher_number" && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Voucher Number *
+                        </label>
+                        <div className="flex items-stretch rounded-xl border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[#0F6E5D]">
+                          <span className="px-3.5 flex items-center bg-slate-100 border-r border-slate-300 text-xs font-mono font-bold text-slate-600">
+                            RV-
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="e.g. 101"
+                            value={formData.voucherNumber || ""}
+                            onChange={(e) => setFormData({ ...formData, voucherNumber: e.target.value })}
+                            className="flex-1 px-3.5 py-3 text-sm font-mono font-semibold bg-transparent focus:outline-none"
+                          />
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          Enter the physical/manual voucher number as recorded in the register.
+                        </p>
+                      </div>
+                    )}
+
                     {/* Step: Review & Save */}
                     {currentStepConfig.id === "review" && (
                       <div className="space-y-4">
@@ -2333,7 +2364,7 @@ export default function TreasurerEntry({
                           )}
                           <div className="flex justify-between py-1.5">
                             <span className="text-slate-500 font-semibold">Voucher #:</span>
-                            <span className="font-mono font-bold text-slate-700">{formData.voucherNumber}</span>
+                            <span className="font-mono font-bold text-slate-700">RV-{formData.voucherNumber}</span>
                           </div>
                         </div>
 
@@ -2687,16 +2718,9 @@ export default function TreasurerEntry({
                           </label>
                           <div className="flex items-center gap-2">
                             <span className="text-lg font-bold text-slate-500">₹</span>
-                            <input
-                              type="number"
-                              min="0"
-                              value={formData.payableAmount || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  payableAmount: Number(e.target.value),
-                                })
-                              }
+                            <AmountInput
+                              value={formData.payableAmount}
+                              onValueChange={(v) => setFormData({ ...formData, payableAmount: v })}
                               className="w-full text-2xl font-bold font-display text-slate-900 bg-transparent focus:outline-hidden"
                               placeholder="0"
                             />
@@ -2724,11 +2748,9 @@ export default function TreasurerEntry({
                           </label>
                           <div className="flex items-center gap-2">
                             <span className="text-lg font-bold text-emerald-700">₹</span>
-                            <input
-                              type="number"
-                              min="0"
-                              value={formData.paidAmount || ""}
-                              onChange={(e) => setFormData({ ...formData, paidAmount: Number(e.target.value) })}
+                            <AmountInput
+                              value={formData.paidAmount}
+                              onValueChange={(v) => setFormData({ ...formData, paidAmount: v })}
                               className="w-full text-2xl font-bold font-display text-emerald-950 bg-transparent focus:outline-hidden"
                               placeholder="0"
                             />
@@ -2817,6 +2839,31 @@ export default function TreasurerEntry({
                       </div>
                     )}
 
+
+                    {/* Step: Voucher Number */}
+                    {currentStepConfig.id === "voucher_number" && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Voucher Number *
+                        </label>
+                        <div className="flex items-stretch rounded-xl border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-amber-500">
+                          <span className="px-3.5 flex items-center bg-slate-100 border-r border-slate-300 text-xs font-mono font-bold text-slate-600">
+                            PV-
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="e.g. 101"
+                            value={formData.voucherNumber || ""}
+                            onChange={(e) => setFormData({ ...formData, voucherNumber: e.target.value })}
+                            className="flex-1 px-3.5 py-3 text-sm font-mono font-semibold bg-transparent focus:outline-none"
+                          />
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          Enter the physical/manual voucher number as recorded in the register.
+                        </p>
+                      </div>
+                    )}
+
                     {/* Step: Review & Save Expense */}
                     {currentStepConfig.id === "review" && (
                       <div className="space-y-4">
@@ -2877,7 +2924,7 @@ export default function TreasurerEntry({
                           )}
                           <div className="flex justify-between py-1.5">
                             <span className="text-slate-500 font-semibold">Voucher #:</span>
-                            <span className="font-mono font-bold text-slate-700">{formData.voucherNumber}</span>
+                            <span className="font-mono font-bold text-slate-700">PV-{formData.voucherNumber}</span>
                           </div>
                         </div>
 
@@ -3020,11 +3067,9 @@ export default function TreasurerEntry({
                           </label>
                           <div className="relative">
                             <span className="absolute left-4 top-3.5 text-xl font-bold text-slate-400">₹</span>
-                            <input
-                              type="number"
-                              min="1"
-                              value={formData.loanAmount || ""}
-                              onChange={(e) => setFormData({ ...formData, loanAmount: Number(e.target.value) })}
+                            <AmountInput
+                              value={formData.loanAmount}
+                              onValueChange={(v) => setFormData({ ...formData, loanAmount: v })}
                               className="w-full pl-9 pr-4 py-3 border border-slate-300 rounded-xl text-2xl font-bold font-display text-indigo-950 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                               placeholder="0"
                             />
@@ -3087,6 +3132,31 @@ export default function TreasurerEntry({
                       </div>
                     )}
 
+
+                    {/* Step: Voucher Number */}
+                    {currentStepConfig.id === "voucher_number" && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Voucher Number *
+                        </label>
+                        <div className="flex items-stretch rounded-xl border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
+                          <span className="px-3.5 flex items-center bg-slate-100 border-r border-slate-300 text-xs font-mono font-bold text-slate-600">
+                            LV-
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="e.g. 101"
+                            value={formData.voucherNumber || ""}
+                            onChange={(e) => setFormData({ ...formData, voucherNumber: e.target.value })}
+                            className="flex-1 px-3.5 py-3 text-sm font-mono font-semibold bg-transparent focus:outline-none"
+                          />
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          Enter the physical/manual voucher number as recorded in the register.
+                        </p>
+                      </div>
+                    )}
+
                     {/* Review */}
                     {currentStepConfig.id === "review" && (
                       <div className="space-y-4">
@@ -3123,7 +3193,7 @@ export default function TreasurerEntry({
                           )}
                           <div className="flex justify-between py-1.5">
                             <span className="text-slate-500 font-semibold">Voucher #:</span>
-                            <span className="font-mono font-bold text-slate-700">{formData.voucherNumber}</span>
+                            <span className="font-mono font-bold text-slate-700">LV-{formData.voucherNumber}</span>
                           </div>
                         </div>
 
@@ -3148,9 +3218,15 @@ export default function TreasurerEntry({
                           </label>
                           <input
                             type="text"
-                            placeholder="e.g. Dr. Suresh Nair"
-                            value={formData.memberName || ""}
-                            onChange={(e) => setFormData({ ...formData, memberName: e.target.value })}
+                            placeholder="e.g. Suresh Nair"
+                            value={formData.memberName || "Dr. "}
+                            onChange={(e) => {
+                              let v = e.target.value;
+                              if (!v.startsWith("Dr. ")) {
+                                v = "Dr. " + v.replace(/^Dr\.?\s*/i, "");
+                              }
+                              setFormData({ ...formData, memberName: v });
+                            }}
                             className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-semibold text-slate-900 shadow-2xs"
                           />
                         </div>
@@ -3502,13 +3578,17 @@ export default function TreasurerEntry({
                           <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
                             IHMA Association Role / Position
                           </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Life Member / Patron / Chapter Committee"
+                          <select
                             value={formData.associationRole || ""}
                             onChange={(e) => setFormData({ ...formData, associationRole: e.target.value })}
                             className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-medium text-slate-900"
-                          />
+                          >
+                            <option value="">Select role</option>
+                            <option value="President">President</option>
+                            <option value="Secretary">Secretary</option>
+                            <option value="Treasurer">Treasurer</option>
+                            <option value="General Secretary">General Secretary</option>
+                          </select>
                         </div>
                       </div>
                     )}
@@ -3730,34 +3810,6 @@ export default function TreasurerEntry({
                 {/* ---------------- ASSET WIZARD STEPS ---------------- */}
                 {activeWizard === "asset" && (
                   <>
-                    {/* Step 1: Entry Date */}
-                    {currentStepConfig.id === "asset_date" && (
-                      <div className="space-y-4">
-                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                          Asset Entry Date *
-                        </label>
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="date"
-                            max={new Date().toISOString().slice(0, 10)}
-                            value={formData.date || new Date().toISOString().slice(0, 10)}
-                            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                            className="flex-1 px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setFormData({ ...formData, date: new Date().toISOString().slice(0, 10) })}
-                            className="px-4 py-3 bg-sky-50 text-sky-800 text-xs font-bold rounded-xl border border-sky-200 hover:bg-sky-100 cursor-pointer"
-                          >
-                            Set Today
-                          </button>
-                        </div>
-                        <p className="text-[11px] text-slate-500">
-                          Date this asset is being recorded into the chapter register.
-                        </p>
-                      </div>
-                    )}
-
                     {/* Step 2: Asset Name */}
                     {currentStepConfig.id === "asset_name" && (
                       <div className="space-y-3">
@@ -3830,12 +3882,10 @@ export default function TreasurerEntry({
                             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-slate-400 pointer-events-none">
                               ₹
                             </span>
-                            <input
-                              type="number"
-                              min="1"
+                            <AmountInput
                               autoFocus
-                              value={formData.assetValue || ""}
-                              onChange={(e) => setFormData({ ...formData, assetValue: Number(e.target.value) })}
+                              value={formData.assetValue}
+                              onValueChange={(v) => setFormData({ ...formData, assetValue: v })}
                               className="w-full text-2xl font-bold pl-10 pr-4 py-3 border border-slate-300 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
                               placeholder="0"
                             />
@@ -3969,17 +4019,58 @@ export default function TreasurerEntry({
                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                           Custodian Name *
                         </label>
-                        <input
-                          type="text"
-                          autoFocus
-                          placeholder="e.g. Dr. Basheer"
-                          value={formData.custodianName || ""}
-                          onChange={(e) => setFormData({ ...formData, custodianName: e.target.value })}
-                          className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
-                        />
-                        <p className="text-[11px] text-slate-500">
-                          Office bearer personally responsible for the custody of this asset.
-                        </p>
+
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Search IHMA doctor member name or member ID..."
+                            value={memberSearchTerm}
+                            onChange={(e) => setMemberSearchTerm(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl text-xs bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                          />
+                          <Search className="h-4 w-4 text-slate-400 absolute left-3 top-3" />
+                        </div>
+
+                        <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                          {filteredMembers.map((m) => (
+                            <div
+                              key={m.memberId}
+                              onClick={() =>
+                                setFormData({
+                                  ...formData,
+                                  custodianName: m.memberName,
+                                  custodianMemberId: m.memberId,
+                                })
+                              }
+                              className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                                formData.custodianMemberId === m.memberId
+                                  ? "border-sky-600 bg-sky-50"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-teal-100 text-teal-800 font-bold flex items-center justify-center text-xs">
+                                  👤
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-xs text-slate-900">{m.memberName}</h4>
+                                  <p className="text-[10px] text-slate-500 font-mono">
+                                    Member ID: {m.memberId} • {m.qualification}
+                                  </p>
+                                </div>
+                              </div>
+                              <div
+                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                                  formData.custodianMemberId === m.memberId
+                                    ? "border-sky-600 bg-sky-600 text-white"
+                                    : "border-slate-300 bg-white"
+                                }`}
+                              >
+                                {formData.custodianMemberId === m.memberId && <Check className="h-3 w-3" />}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
 
@@ -3994,34 +4085,6 @@ export default function TreasurerEntry({
                           </span>
                         </div>
 
-                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs">
-                          <div className="flex justify-between py-1.5 border-b border-slate-200">
-                            <span className="text-slate-500 font-semibold">Total Value:</span>
-                            <span className="font-bold text-slate-900">{formatINR(totalValueOf(formData))}</span>
-                          </div>
-                          <div className="flex justify-between py-1.5 border-b border-slate-200">
-                            <span className="text-slate-500 font-semibold">Asset Life:</span>
-                            <span className="font-bold text-slate-900">{Number(formData.assetLife) || 0} Years</span>
-                          </div>
-                          <div className="flex justify-between py-1.5 border-b border-slate-200">
-                            <span className="text-slate-500 font-semibold">
-                              Depreciation Per Year
-                              <span className="text-[10px] text-slate-400 font-medium block">
-                                Auto: total value ÷ asset life
-                              </span>
-                            </span>
-                            <span className="font-bold text-rose-700 text-sm">
-                              {formatINR(depreciationAmountOf(formData))}
-                            </span>
-                          </div>
-                          <div className="flex justify-between py-1.5">
-                            <span className="text-slate-500 font-semibold">
-                              Net Amount
-                              <span className="text-[10px] text-slate-400 font-medium block">After 1 year</span>
-                            </span>
-                            <span className="font-black text-sky-800 text-sm">{formatINR(netAmountOf(formData))}</span>
-                          </div>
-                        </div>
                       </div>
                     )}
 
@@ -4040,10 +4103,6 @@ export default function TreasurerEntry({
                           <div className="flex justify-between py-1.5 border-b border-slate-200">
                             <span className="text-slate-500 font-semibold">Asset Number:</span>
                             <span className="font-mono font-bold text-amber-800">{formData.assetNumber}</span>
-                          </div>
-                          <div className="flex justify-between py-1.5 border-b border-slate-200">
-                            <span className="text-slate-500 font-semibold">Entry Date:</span>
-                            <span className="font-bold text-slate-900">{formData.date ? formatDateDMY(formData.date) : "—"}</span>
                           </div>
                           <div className="flex justify-between py-1.5 border-b border-slate-200">
                             <span className="text-slate-500 font-semibold">Asset Name:</span>
@@ -4083,23 +4142,12 @@ export default function TreasurerEntry({
                             <span className="text-slate-500 font-semibold">Custodian:</span>
                             <span className="font-bold text-slate-900">{formData.custodianName}</span>
                           </div>
-                          <div className="flex justify-between py-1.5 border-b border-slate-200">
-                            <span className="text-slate-500 font-semibold">Depreciation / Year:</span>
-                            <span className="font-bold text-rose-700">{formatINR(depreciationAmountOf(formData))}</span>
-                          </div>
                           {formData.remarks && (
                             <div className="flex justify-between py-1.5 border-b border-slate-200">
                               <span className="text-slate-500 font-semibold">Remarks:</span>
                               <span className="font-medium text-slate-800 italic">{formData.remarks}</span>
                             </div>
                           )}
-                          <div className="flex justify-between py-1.5">
-                            <span className="text-slate-500 font-semibold">
-                              Net Amount
-                              <span className="text-[10px] text-slate-400 font-medium block">After 1 year</span>
-                            </span>
-                            <span className="font-black text-sky-800 text-sm">{formatINR(netAmountOf(formData))}</span>
-                          </div>
                         </div>
 
                         <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 text-xs text-amber-900 flex items-center gap-2">
@@ -4196,12 +4244,10 @@ export default function TreasurerEntry({
                           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-slate-400 pointer-events-none">
                             ₹
                           </span>
-                          <input
-                            type="number"
-                            min="1"
+                          <AmountInput
                             autoFocus
-                            value={formData.amount || ""}
-                            onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })}
+                            value={formData.amount}
+                            onValueChange={(v) => setFormData({ ...formData, amount: v })}
                             className="w-full text-2xl font-bold pl-10 pr-4 py-3 border border-slate-300 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500"
                             placeholder="0"
                           />
@@ -4222,12 +4268,10 @@ export default function TreasurerEntry({
                           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-slate-400 pointer-events-none">
                             ₹
                           </span>
-                          <input
-                            type="number"
-                            min="1"
+                          <AmountInput
                             autoFocus
-                            value={formData.interestAmount || ""}
-                            onChange={(e) => setFormData({ ...formData, interestAmount: Number(e.target.value) })}
+                            value={formData.interestAmount}
+                            onValueChange={(v) => setFormData({ ...formData, interestAmount: v })}
                             className="w-full text-2xl font-bold pl-10 pr-4 py-3 border border-slate-300 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500"
                             placeholder="0"
                           />
@@ -4259,23 +4303,43 @@ export default function TreasurerEntry({
                       </div>
                     )}
 
-                    {/* FD Maturity Date */}
-                    {currentStepConfig.id === "fd_maturity_date" && (
-                      <div className="space-y-3">
-                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                          FD Maturity Date *
-                        </label>
-                        <input
-                          type="date"
-                          min={formData.date || undefined}
-                          autoFocus
-                          value={formData.maturityDate || ""}
-                          onChange={(e) => setFormData({ ...formData, maturityDate: e.target.value })}
-                          className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500"
-                        />
-                        <p className="text-[11px] text-slate-500">
-                          Enter the maturity date stated on the FD certificate or bank receipt.
-                        </p>
+                    {/* FD Term & Maturity Date */}
+                    {currentStepConfig.id === "fd_term" && (
+                      <div className="space-y-4">
+                        <div className="space-y-3">
+                          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            FD Term (Years) *
+                          </label>
+                          <select
+                            value={formData.fdTermYears || ""}
+                            onChange={(e) => {
+                              const years = Number(e.target.value);
+                              const base = formData.date ? new Date(formData.date) : new Date();
+                              base.setFullYear(base.getFullYear() + years);
+                              const maturityDate = base.toISOString().slice(0, 10);
+                              setFormData({ ...formData, fdTermYears: years, maturityDate });
+                            }}
+                            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                          >
+                            <option value="" disabled>
+                              Select FD term...
+                            </option>
+                            {Array.from({ length: 25 }, (_, i) => i + 1).map((y) => (
+                              <option key={y} value={y}>
+                                {y} {y === 1 ? "Year" : "Years"}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            FD Maturity Date
+                          </label>
+                          <div className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-semibold bg-slate-50 text-slate-700">
+                            {formData.maturityDate ? formatDateDMY(formData.maturityDate) : "Select FD term to compute"}
+                          </div>
+                        </div>
                       </div>
                     )}
 
@@ -4303,9 +4367,26 @@ export default function TreasurerEntry({
                             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Bank Branch Address</label>
                             <textarea rows={2} placeholder="Branch address" value={formData.bankAddress || ""} onChange={(e) => setFormData({ ...formData, bankAddress: e.target.value })} className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500" />
                           </div>
-                          <div className="sm:col-span-2">
+                          <div className="sm:col-span-2 space-y-2">
                             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Deposited By</label>
-                            <input type="text" placeholder="e.g. Dr. Basheer" value={formData.depositedBy || ""} onChange={(e) => setFormData({ ...formData, depositedBy: e.target.value })} className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500" />
+                            <select
+                              value={formData.depositedByMemberId || ""}
+                              onChange={(e) => {
+                                const memberId = e.target.value;
+                                const m = membersList.find((mm) => mm.memberId === memberId);
+                                setFormData({ ...formData, depositedByMemberId: memberId, depositedBy: m?.memberName || "" });
+                              }}
+                              className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                            >
+                              <option value="" disabled>
+                                Select member...
+                              </option>
+                              {membersList.map((m) => (
+                                <option key={m.memberId} value={m.memberId}>
+                                  {m.memberName} ({m.memberId})
+                                </option>
+                              ))}
+                            </select>
                           </div>
                         </div>
                         <p className="text-[11px] text-slate-500">Only the bank name is required; the remaining details can be completed when available.</p>
@@ -4371,6 +4452,10 @@ export default function TreasurerEntry({
                               <div className="flex justify-between py-1.5 border-b border-slate-200">
                                 <span className="text-slate-500 font-semibold">FD Amount:</span>
                                 <span className="font-black text-purple-800 text-sm">{formatINR(formData.amount)}</span>
+                              </div>
+                              <div className="flex justify-between py-1.5 border-b border-slate-200">
+                                <span className="text-slate-500 font-semibold">FD Term:</span>
+                                <span className="font-bold text-slate-900">{formData.fdTermYears ? `${formData.fdTermYears} Years` : "—"}</span>
                               </div>
                               <div className="flex justify-between py-1.5 border-b border-slate-200">
                                 <span className="text-slate-500 font-semibold">Maturity Date:</span>

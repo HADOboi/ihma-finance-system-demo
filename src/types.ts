@@ -199,6 +199,9 @@ export interface Transaction {
   remarks?: string; // Additional notes
 
   // Capital purchase link (asset register cross-reference)
+  fdBalanceAfter?: number; // FD balance after this interest payout
+  fdYear?: number; // FD interest payout year (1 of N)
+  fdRef?: string; // Fixed deposit reference
   assetRef?: string; // Asset ID this expense paid for, e.g. AST-[#009]
 
   // Bank interest linkage

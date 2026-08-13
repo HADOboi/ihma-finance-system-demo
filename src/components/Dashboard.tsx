@@ -77,6 +77,7 @@ interface DashboardProps {
 type PeriodType = "year" | "month" | "day" | "custom";
 
 type ReportTab =
+  | "heads"
   | "payments"
   | "receipts"
   | "loans"
@@ -133,7 +134,7 @@ function MultiSelectFilter({
 
   let summary: string;
   if (isEmpty) summary = emptyHint;
-  else if (chosen.length === 0) summary = `All ${label.toLowerCase()} (${options.length})`;
+  else if (chosen.length === 0) summary = `None selected (${options.length} available)`;
   else if (chosen.length === options.length) summary = `All ${label.toLowerCase()} (${options.length})`;
   else if (chosen.length <= 2) summary = chosen.map((o) => o.name).join(", ");
   else summary = `${chosen.length} of ${options.length} selected`;
@@ -333,15 +334,19 @@ export default function Dashboard({
 
   const selectedFinancialUnitIds = useMemo(() => {
     if (currentUser.level === OrgLevel.Local) return [userFinancialUnitId];
-    const stateUnits = currentUser.level === OrgLevel.National
-      ? (selectedStates.length > 0 ? selectedStates : STATES.map((state) => state.id))
-      : [];
-    const districtUnits = selectedDistricts.length > 0 ? selectedDistricts : availableDistricts.map((district) => district.id);
-    const localUnits = selectedChapters.length > 0 ? selectedChapters : availableChapters.map((chapter) => chapter.id);
+    // For every level above Local, an empty selection means nothing is picked
+    // yet — it must NOT silently fall back to "everything".
+    const stateUnits = selectedStates;
+    const districtUnits = selectedDistricts;
+    const localUnits = selectedChapters;
     const ownUnit = includeOwnFinancialUnit ? [userFinancialUnitId] : [];
     return [...new Set([...ownUnit, ...stateUnits, ...districtUnits, ...localUnits])]
       .filter((id) => readableFinancialUnitIds.includes(id));
-  }, [currentUser.level, userFinancialUnitId, includeOwnFinancialUnit, selectedStates, selectedDistricts, selectedChapters, availableDistricts, availableChapters, readableFinancialUnitIds]);
+  }, [currentUser.level, userFinancialUnitId, includeOwnFinancialUnit, selectedStates, selectedDistricts, selectedChapters, readableFinancialUnitIds]);
+
+  const hasAnyGeoSelection = currentUser.level === OrgLevel.Local
+    ? true
+    : selectedFinancialUnitIds.length > 0;
 
   // Handle toggles. Selecting never auto-selects anything downstream — the user
   // picks each level themselves. Deselecting still prunes downstream choices
@@ -598,20 +603,23 @@ export default function Dashboard({
       // Exclude loans from standard monthly aggregated table
       if (tx.type === HeadType.Loan) return;
 
-      // Ensure the head is in the list (could be deleted or disabled, default to backup snapshot info)
-      if (!headMap[tx.headId]) {
-        headMap[tx.headId] = {
-          headId: tx.headId,
-          headName: tx.headName,
+      // Ensure the head is in the list (could be deleted, disabled, or a manual
+      // entry with no headId at all — fall back to a stable key built from the
+      // transaction's own stored headName so it never collides with others).
+      const headKey = tx.headId || `custom_${tx.type}_${tx.headName || "general"}`;
+      if (!headMap[headKey]) {
+        headMap[headKey] = {
+          headId: headKey,
+          headName: tx.headName || "General Head",
           type: tx.type,
           total: 0,
           vouchers: [],
         };
       }
 
-      headMap[tx.headId].total += tx.amount;
+      headMap[headKey].total += tx.amount;
       if (tx.voucherNumber) {
-        headMap[tx.headId].vouchers.push(tx.voucherNumber);
+        headMap[headKey].vouchers.push(tx.voucherNumber);
       }
     });
 
@@ -971,22 +979,45 @@ export default function Dashboard({
   return (
     <div className="space-y-6 font-sans">
       {/* 1. SELECTION FILTERS PANEL (Based on User's Org Level) */}
-      <button
-        type="button"
-        id="guided-report-button-top"
-        onClick={() => setShowReportWizard(true)}
-        className="w-full min-h-14 sm:min-h-16 bg-gradient-to-r from-[#0F6E5D] to-teal-700 hover:from-[#0B5548] hover:to-teal-800 text-white rounded-2xl px-5 py-4 shadow-sm flex items-center justify-between gap-4 cursor-pointer transition-colors"
-      >
-        <span className="flex items-center gap-3 text-left">
-          <span className="h-9 w-9 rounded-xl bg-white/15 border border-white/20 flex items-center justify-center"><Sparkles className="h-5 w-5" /></span>
-          <span><span className="block text-base sm:text-lg font-black">Specific report</span><span className="block text-xs text-teal-100 mt-0.5">Choose financial units, dates, and account heads.</span></span>
-        </span>
-        <ChevronRight className="h-5 w-5 shrink-0" />
-      </button>
       <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs" id="dashboard-filters-container">
-        <div className="flex items-center gap-2 mb-4 text-emerald-950 font-bold text-base border-b border-slate-100 pb-3">
-          {onBackToHome && <button type="button" onClick={onBackToHome} id="back-to-home-button" className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded-xl border border-slate-200" aria-label="Back to home"><ArrowLeft className="h-4 w-4" />Back to Home</button>}
+        <div className="flex flex-col gap-3 mb-4 border-b border-slate-100 pb-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {onBackToHome && (
+              <button
+                type="button"
+                onClick={onBackToHome}
+                id="back-to-home-button"
+                className="inline-flex items-center gap-2 h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 shrink-0 cursor-pointer"
+                aria-label="Back to home"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Home
+              </button>
+            )}
+            <button
+              type="button"
+              id="guided-report-button-top"
+              onClick={() => setShowReportWizard(true)}
+              className="inline-flex items-center gap-2 h-9 px-3.5 bg-gradient-to-r from-[#0F6E5D] to-teal-700 hover:from-[#0B5548] hover:to-teal-800 text-white rounded-xl shadow-sm cursor-pointer transition-colors shrink-0"
+            >
+              <Sparkles className="h-4 w-4 shrink-0" />
+              <span className="text-xs font-bold">Specific report</span>
+            </button>
+
+            <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-200 text-[11px] font-bold">
+                {scopeLabel}
+              </span>
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200 text-[11px] font-bold">
+                {currentUser.level}
+              </span>
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-bold">
+                {currentUser.role === "Treasurer" ? "Treasurer (R/W)" : `${currentUser.role} (RO)`}
+              </span>
+            </div>
+          </div>
         </div>
+
 
         <div className="space-y-5">
           {/* A. Geographical / Organizational selections (Cascading) */}
@@ -1060,27 +1091,15 @@ export default function Dashboard({
               </div>
             )}
 
-            {/* Local Chapter Information */}
-            {currentUser.level === OrgLevel.Local && (
-              <div className="bg-blue-50/40 p-3.5 border border-blue-100 rounded-xl grid grid-cols-3 gap-3">
-                <div>
-                  <span className="text-xs text-slate-500 uppercase font-semibold">Chapter</span>
-                  <p className="text-sm font-bold text-blue-900 mt-0.5">
-                    {CHAPTERS.find((c) => c.id === currentUser.nodeId)?.name || currentUser.nodeId}
-                  </p>
-                </div>
-                <div className="text-center">
-                  <span className="text-xs text-slate-500 uppercase font-semibold">Level</span>
-                  <p className="text-sm font-bold text-blue-900 mt-0.5">{currentUser.level}</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-xs text-slate-500 uppercase font-semibold">Role</span>
-                  <p className="text-sm font-bold text-blue-900 mt-0.5 flex items-center justify-end gap-1">
-                    {currentUser.role === "Treasurer" ? "Treasurer (R/W)" : `${currentUser.role} (RO)`}
-                  </p>
-                </div>
+            {currentUser.level !== OrgLevel.Local && !hasAnyGeoSelection && (
+              <div id="no-geo-selection-notice" className="flex items-center gap-2.5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-semibold text-amber-800">
+                <Info className="h-4 w-4 shrink-0" />
+                Select at least one state, district or chapter above to view data. Nothing is shown until you make a selection.
               </div>
             )}
+
+
+
           </div>
 
           {/* Date Range Selector Bar */}
@@ -1274,30 +1293,30 @@ export default function Dashboard({
                 <tbody className="divide-y divide-slate-100 text-slate-800">
                   <tr className="hover:bg-slate-50/50">
                     <td className="py-2.5 px-4 font-semibold text-slate-800">Actual Receipts (Income)</td>
-                    <td className="py-2.5 px-4 text-right font-mono">₹{summaryMetrics.actualIncomeCash.toLocaleString()}</td>
-                    <td className="py-2.5 px-4 text-right font-mono">₹{summaryMetrics.actualIncomeBank.toLocaleString()}</td>
+                    <td className="py-2.5 px-4 text-right font-mono">{formatINR(summaryMetrics.actualIncomeCash)}</td>
+                    <td className="py-2.5 px-4 text-right font-mono">{formatINR(summaryMetrics.actualIncomeBank)}</td>
                     <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900 bg-slate-50/60">
-                      ₹{summaryMetrics.actualIncomeTotal.toLocaleString()}
+                      {formatINR(summaryMetrics.actualIncomeTotal)}
                     </td>
                   </tr>
                   <tr className="hover:bg-slate-50/50">
                     <td className="py-2.5 px-4 font-semibold text-slate-800">Loan Repayments Received</td>
                     <td className="py-2.5 px-4 text-right font-mono">
-                      {summaryMetrics.loanRepaidCash > 0 ? `₹${summaryMetrics.loanRepaidCash.toLocaleString()}` : "—"}
+                      {summaryMetrics.loanRepaidCash > 0 ? formatINR(summaryMetrics.loanRepaidCash) : "—"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono">
-                      {summaryMetrics.loanRepaidBank > 0 ? `₹${summaryMetrics.loanRepaidBank.toLocaleString()}` : "—"}
+                      {summaryMetrics.loanRepaidBank > 0 ? formatINR(summaryMetrics.loanRepaidBank) : "—"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono font-bold text-emerald-800 bg-slate-50/60">
-                      {summaryMetrics.loanRepaidTotal > 0 ? `₹${summaryMetrics.loanRepaidTotal.toLocaleString()}` : "—"}
+                      {summaryMetrics.loanRepaidTotal > 0 ? formatINR(summaryMetrics.loanRepaidTotal) : "—"}
                     </td>
                   </tr>
                   <tr className="bg-emerald-50/60 font-black text-emerald-950 border-t-2 border-emerald-200">
                     <td className="py-3 px-4 uppercase text-[11px] tracking-wider">Total Receipts (Income)</td>
-                    <td className="py-3 px-4 text-right font-mono">₹{summaryMetrics.totalIncomeCash.toLocaleString()}</td>
-                    <td className="py-3 px-4 text-right font-mono">₹{summaryMetrics.totalIncomeBank.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-right font-mono">{formatINR(summaryMetrics.totalIncomeCash)}</td>
+                    <td className="py-3 px-4 text-right font-mono">{formatINR(summaryMetrics.totalIncomeBank)}</td>
                     <td className="py-3 px-4 text-right font-mono text-sm bg-emerald-100/70 text-emerald-950">
-                      ₹{summaryMetrics.totalIncomeGrand.toLocaleString()}
+                      {formatINR(summaryMetrics.totalIncomeGrand)}
                     </td>
                   </tr>
                 </tbody>
@@ -1325,30 +1344,30 @@ export default function Dashboard({
                 <tbody className="divide-y divide-slate-100 text-slate-800">
                   <tr className="hover:bg-slate-50/50">
                     <td className="py-2.5 px-4 font-semibold text-slate-800">Actual Payments (Expense)</td>
-                    <td className="py-2.5 px-4 text-right font-mono">₹{summaryMetrics.actualExpenseCash.toLocaleString()}</td>
-                    <td className="py-2.5 px-4 text-right font-mono">₹{summaryMetrics.actualExpenseBank.toLocaleString()}</td>
+                    <td className="py-2.5 px-4 text-right font-mono">{formatINR(summaryMetrics.actualExpenseCash)}</td>
+                    <td className="py-2.5 px-4 text-right font-mono">{formatINR(summaryMetrics.actualExpenseBank)}</td>
                     <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900 bg-slate-50/60">
-                      ₹{summaryMetrics.actualExpenseTotal.toLocaleString()}
+                      {formatINR(summaryMetrics.actualExpenseTotal)}
                     </td>
                   </tr>
                   <tr className="hover:bg-slate-50/50">
                     <td className="py-2.5 px-4 font-semibold text-slate-800">Loan Payments</td>
                     <td className="py-2.5 px-4 text-right font-mono">
-                      {summaryMetrics.loansGivenCash > 0 ? `₹${summaryMetrics.loansGivenCash.toLocaleString()}` : "—"}
+                      {summaryMetrics.loansGivenCash > 0 ? formatINR(summaryMetrics.loansGivenCash) : "—"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono">
-                      {summaryMetrics.loansGivenBank > 0 ? `₹${summaryMetrics.loansGivenBank.toLocaleString()}` : "—"}
+                      {summaryMetrics.loansGivenBank > 0 ? formatINR(summaryMetrics.loansGivenBank) : "—"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono font-bold text-rose-800 bg-slate-50/60">
-                      {summaryMetrics.loansGivenTotal > 0 ? `₹${summaryMetrics.loansGivenTotal.toLocaleString()}` : "—"}
+                      {summaryMetrics.loansGivenTotal > 0 ? formatINR(summaryMetrics.loansGivenTotal) : "—"}
                     </td>
                   </tr>
                   <tr className="bg-rose-50/60 font-black text-rose-950 border-t-2 border-rose-200">
                     <td className="py-3 px-4 uppercase text-[11px] tracking-wider">Total Payments (Expense)</td>
-                    <td className="py-3 px-4 text-right font-mono">₹{summaryMetrics.totalExpenseCash.toLocaleString()}</td>
-                    <td className="py-3 px-4 text-right font-mono">₹{summaryMetrics.totalExpenseBank.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-right font-mono">{formatINR(summaryMetrics.totalExpenseCash)}</td>
+                    <td className="py-3 px-4 text-right font-mono">{formatINR(summaryMetrics.totalExpenseBank)}</td>
                     <td className="py-3 px-4 text-right font-mono text-sm bg-rose-100/70 text-rose-950">
-                      ₹{summaryMetrics.totalExpenseGrand.toLocaleString()}
+                      {formatINR(summaryMetrics.totalExpenseGrand)}
                     </td>
                   </tr>
                 </tbody>
@@ -1363,7 +1382,7 @@ export default function Dashboard({
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Cash in Hand</span>
               <span className={`text-base font-black ${summaryMetrics.netCashBalance >= 0 ? "text-slate-900" : "text-rose-700"}`}>
-                ₹{summaryMetrics.netCashBalance.toLocaleString()}
+                {formatINR(summaryMetrics.netCashBalance)}
               </span>
             </div>
             <span className="text-xl">💵</span>
@@ -1373,7 +1392,7 @@ export default function Dashboard({
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Cash at Bank</span>
               <span className={`text-base font-black ${summaryMetrics.netBankBalance >= 0 ? "text-slate-900" : "text-rose-700"}`}>
-                ₹{summaryMetrics.netBankBalance.toLocaleString()}
+                {formatINR(summaryMetrics.netBankBalance)}
               </span>
             </div>
             <span className="text-xl">🏦</span>
@@ -1383,7 +1402,7 @@ export default function Dashboard({
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Surplus / Deficit</span>
               <span className={`text-base font-black ${summaryMetrics.netTotalBalance >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                {summaryMetrics.netTotalBalance >= 0 ? "+" : ""}₹{summaryMetrics.netTotalBalance.toLocaleString()}
+                {summaryMetrics.netTotalBalance >= 0 ? "+" : ""}{formatINR(summaryMetrics.netTotalBalance)}
               </span>
             </div>
             <span className="text-xl">⚖️</span>
@@ -1624,17 +1643,17 @@ export default function Dashboard({
                                 <span className="font-semibold text-rose-800">{tx.headName}</span>
                               )}
                             </td>
-                            <td className="py-3 px-3 text-right font-medium text-slate-600">₹{(tx.payableAmount || tx.amount).toLocaleString()}</td>
-                            <td className="py-3 px-3 text-right font-bold text-rose-900">₹{(tx.paidAmount || tx.amount).toLocaleString()}</td>
+                            <td className="py-3 px-3 text-right font-medium text-slate-600">{formatINR((tx.payableAmount || tx.amount))}</td>
+                            <td className="py-3 px-3 text-right font-bold text-rose-900">{formatINR((tx.paidAmount || tx.amount))}</td>
                             <td className="py-3 px-3 text-right font-mono font-bold text-slate-600">
-                              {tx.type === HeadType.Loan ? `₹${(tx.loanBalance || 0).toLocaleString()}` : `₹${(tx.balanceAmount || 0).toLocaleString()}`}
+                              {tx.type === HeadType.Loan ? formatINR((tx.loanBalance || 0)) : formatINR((tx.balanceAmount || 0))}
                             </td>
                             <td className="py-3 px-3">
                               <span className="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-full text-[10px] uppercase">
                                 {tx.paymentMode || "Cash"}
                               </span>
                             </td>
-                            <td className="py-3 px-3 text-slate-500 max-w-xs truncate" title={tx.remarks || tx.description}>{tx.remarks || tx.description || "—"}</td>
+                            <td className="py-3 px-3 text-slate-500 max-w-xs truncate" title={tx.remarks || undefined}>{tx.remarks || "—"}</td>
                             {false && (
                               <td className="py-3 px-3 text-center">
                                 {isEditable ? (
@@ -1728,16 +1747,16 @@ export default function Dashboard({
                                 <span className="font-semibold text-blue-800">{tx.headName}</span>
                               )}
                             </td>
-                            <td className="py-3 px-3 text-right font-medium text-slate-600">₹{(tx.offeredAmount || tx.amount).toLocaleString()}</td>
-                            <td className="py-3 px-3 text-right font-bold text-blue-900">₹{(tx.paidAmount || tx.amount).toLocaleString()}</td>
-                            <td className="py-3 px-3 text-right font-mono font-bold text-slate-600">₹{(tx.balanceAmount || 0).toLocaleString()}</td>
+                            <td className="py-3 px-3 text-right font-medium text-slate-600">{formatINR((tx.offeredAmount || tx.amount))}</td>
+                            <td className="py-3 px-3 text-right font-bold text-blue-900">{formatINR((tx.paidAmount || tx.amount))}</td>
+                            <td className="py-3 px-3 text-right font-mono font-bold text-slate-600">{formatINR((tx.balanceAmount || 0))}</td>
                             <td className="py-3 px-3">
                               <span className="bg-blue-50 text-blue-800 font-bold px-2 py-0.5 rounded-full text-[10px] uppercase border border-blue-100">
                                 {tx.paymentMode || "Bank"}
                               </span>
                             </td>
                             <td className="py-3 px-3 font-mono font-bold text-slate-700">{tx.paidByMemberId || "—"}</td>
-                            <td className="py-3 px-3 text-slate-500 max-w-xs truncate" title={tx.remarks || tx.description}>{tx.remarks || tx.description || "—"}</td>
+                            <td className="py-3 px-3 text-slate-500 max-w-xs truncate" title={tx.remarks || undefined}>{tx.remarks || "—"}</td>
                             {false && (
                               <td className="py-3 px-3 text-center">
                                 {isEditable ? (
@@ -1837,9 +1856,9 @@ export default function Dashboard({
                                 ) : null}
                               </div>
                             </td>
-                            <td className="py-3 px-3 text-right font-bold text-slate-900">₹{tx.amount.toLocaleString()}</td>
-                            <td className="py-3 px-3 text-right font-medium text-emerald-700">₹{(tx.amountReturned || 0).toLocaleString()}</td>
-                            <td className="py-3 px-3 text-right font-black text-indigo-900">₹{bal.toLocaleString()}</td>
+                            <td className="py-3 px-3 text-right font-bold text-slate-900">{formatINR(tx.amount)}</td>
+                            <td className="py-3 px-3 text-right font-medium text-emerald-700">{formatINR((tx.amountReturned || 0))}</td>
+                            <td className="py-3 px-3 text-right font-black text-indigo-900">{formatINR(bal)}</td>
                             <td className="py-3 px-3 font-mono text-slate-600 whitespace-nowrap">{tx.loanReturnDate ? formatDateDMY(tx.loanReturnDate) : "—"}</td>
                             <td className="py-3 px-3 text-slate-500 max-w-xs truncate">{tx.remarks || "—"}</td>
                             {false && (
@@ -2052,8 +2071,8 @@ export default function Dashboard({
                           <td className="py-3 px-3 font-bold text-slate-900">{a.assetName}</td>
                           <td className="py-3 px-3 font-mono text-slate-600 whitespace-nowrap">{a.purchaseDate ? formatDateDMY(a.purchaseDate) : "—"}</td>
                           <td className="py-3 px-3 text-right font-mono font-bold text-slate-700">{a.quantity ?? 1}</td>
-                          <td className="py-3 px-3 text-right font-semibold text-slate-700">₹{a.assetValue.toLocaleString()}</td>
-                          <td className="py-3 px-3 text-right font-black text-slate-900">₹{(a.totalValue ?? a.assetValue).toLocaleString()}</td>
+                          <td className="py-3 px-3 text-right font-semibold text-slate-700">{formatINR(a.assetValue)}</td>
+                          <td className="py-3 px-3 text-right font-black text-slate-900">{formatINR((a.totalValue ?? a.assetValue))}</td>
                           <td className="py-3 px-3">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                               a.paymentMode === "Bank" ? "bg-sky-50 text-sky-800 border border-sky-200" : "bg-emerald-50 text-emerald-800 border border-emerald-200"
@@ -2064,8 +2083,8 @@ export default function Dashboard({
                           <td className="py-3 px-3 font-semibold text-blue-700">{a.category}</td>
                           <td className="py-3 px-3 text-right font-mono font-bold text-slate-700">{a.assetLife}</td>
                           <td className="py-3 px-3 font-medium text-slate-800">{a.custodianName}</td>
-                          <td className="py-3 px-3 text-right font-bold text-rose-700">₹{(a.depreciationAmount ?? 0).toLocaleString()}</td>
-                          <td className="py-3 px-3 text-right font-black text-sky-800">₹{(a.netAmount ?? a.totalValue ?? a.assetValue).toLocaleString()}</td>
+                          <td className="py-3 px-3 text-right font-bold text-rose-700">{formatINR((a.depreciationAmount ?? 0))}</td>
+                          <td className="py-3 px-3 text-right font-black text-sky-800">{formatINR((a.netAmount ?? a.totalValue ?? a.assetValue))}</td>
                           <td className="py-3 px-3 text-slate-600 italic">{a.remarks || "—"}</td>
                         </tr>
                       ))
@@ -2118,7 +2137,7 @@ export default function Dashboard({
                           <td className="py-3 px-4 text-slate-600 text-[11px]">{b.bankAddress || "—"}</td>
                           <td className="py-3 px-4 text-slate-600">{b.bankContactNumber || "—"}</td>
                           <td className="py-3 px-4 font-medium text-slate-800">{b.depositedBy || "—"}</td>
-                          <td className="py-3 px-4 text-right font-black text-slate-900 text-sm">₹{b.amount.toLocaleString()}</td>
+                          <td className="py-3 px-4 text-right font-black text-slate-900 text-sm">{formatINR(b.amount)}</td>
                           <td className="py-3 px-4 font-mono text-slate-600 whitespace-nowrap">{b.maturityDate ? formatDateDMY(b.maturityDate) : "—"}</td>
                           <td className="py-3 px-4 text-slate-600 italic">{b.remarks || "—"}</td>
                         </tr>
@@ -2218,12 +2237,12 @@ export default function Dashboard({
                           </td>
                           <td className="py-3 px-4 font-semibold text-slate-800">{row.headName}</td>
                           <td className="py-3 px-4 font-mono text-[11px] text-slate-600">{row.voucherString}</td>
-                          <td className="py-3 px-4 text-right font-bold text-slate-900">₹{row.total.toLocaleString()}</td>
+                          <td className="py-3 px-4 text-right font-bold text-slate-900">{formatINR(row.total)}</td>
                         </tr>
                       ))}
                     <tr className="bg-blue-50/20 font-bold border-t border-b border-slate-200 text-slate-900">
                       <td colSpan={3} className="py-3 px-4 text-right">Total Receipts (A):</td>
-                      <td className="py-3 px-4 text-right font-black text-blue-900">₹{totalIncome.toLocaleString()}</td>
+                      <td className="py-3 px-4 text-right font-black text-blue-900">{formatINR(totalIncome)}</td>
                     </tr>
 
                     {/* Expense Heads */}
@@ -2240,19 +2259,19 @@ export default function Dashboard({
                           </td>
                           <td className="py-3 px-4 font-semibold text-slate-800">{row.headName}</td>
                           <td className="py-3 px-4 font-mono text-[11px] text-slate-600">{row.voucherString}</td>
-                          <td className="py-3 px-4 text-right font-bold text-slate-900">₹{row.total.toLocaleString()}</td>
+                          <td className="py-3 px-4 text-right font-bold text-slate-900">{formatINR(row.total)}</td>
                         </tr>
                       ))}
                     <tr className="bg-rose-50/30 font-bold border-t border-b border-slate-200 text-slate-900">
                       <td colSpan={3} className="py-3 px-4 text-right">Total Payments (B):</td>
-                      <td className="py-3 px-4 text-right font-black text-rose-950">₹{totalExpense.toLocaleString()}</td>
+                      <td className="py-3 px-4 text-right font-black text-rose-950">{formatINR(totalExpense)}</td>
                     </tr>
 
                     {/* Financial Summary Net Row */}
                     <tr className="bg-slate-100 font-bold text-slate-900">
                       <td colSpan={3} className="py-3.5 px-4 text-right">Net Surplus Balance (A - B):</td>
                       <td className={`py-3.5 px-4 text-right font-black ${netBalance >= 0 ? "text-blue-900" : "text-rose-950"}`}>
-                        ₹{netBalance.toLocaleString()}
+                        {formatINR(netBalance)}
                       </td>
                     </tr>
                   </tbody>
@@ -2289,11 +2308,11 @@ export default function Dashboard({
                           <td className="py-2.5 px-2 text-blue-700 font-bold text-[9px]">Receipt</td>
                           {row.monthlyTotals.map((tot, idx) => (
                             <td key={idx} className="py-2.5 px-2 text-right font-mono">
-                              {tot > 0 ? `₹${tot.toLocaleString()}` : "—"}
+                              {tot > 0 ? formatINR(tot) : "—"}
                             </td>
                           ))}
                           <td className="py-2.5 px-3 text-right font-black text-slate-900 bg-blue-50/20">
-                            ₹{row.grandTotal.toLocaleString()}
+                            {formatINR(row.grandTotal)}
                           </td>
                         </tr>
                       ))}
@@ -2310,11 +2329,11 @@ export default function Dashboard({
                           <td className="py-2.5 px-2 text-rose-700 font-bold text-[9px]">Payment</td>
                           {row.monthlyTotals.map((tot, idx) => (
                             <td key={idx} className="py-2.5 px-2 text-right font-mono">
-                              {tot > 0 ? `₹${tot.toLocaleString()}` : "—"}
+                              {tot > 0 ? formatINR(tot) : "—"}
                             </td>
                           ))}
                           <td className="py-2.5 px-3 text-right font-black text-slate-900 bg-rose-50/40">
-                            ₹{row.grandTotal.toLocaleString()}
+                            {formatINR(row.grandTotal)}
                           </td>
                         </tr>
                       ))}
@@ -2373,7 +2392,7 @@ export default function Dashboard({
                             <td className="py-3.5 px-4 font-semibold text-slate-800">{tx.headName}</td>
                             <td className="py-3.5 px-4 font-mono font-bold text-slate-700">{tx.voucherNumber || "—"}</td>
                             <td className="py-3.5 px-4 text-slate-600 max-w-xs truncate" title={tx.description}>{tx.description || "—"}</td>
-                            <td className="py-3.5 px-4 text-right font-black text-slate-900">₹{tx.amount.toLocaleString()}</td>
+                            <td className="py-3.5 px-4 text-right font-black text-slate-900">{formatINR(tx.amount)}</td>
                             
                             {false && (
                               <td className="py-3.5 px-4 text-center">
@@ -2468,12 +2487,12 @@ export default function Dashboard({
               <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 flex justify-between text-xs">
                 <div>
                   <span className="text-emerald-700 font-semibold block">Original Loan</span>
-                  <span className="text-sm font-black text-emerald-950">₹{repayModalTx.amount.toLocaleString()}</span>
+                  <span className="text-sm font-black text-emerald-950">{formatINR(repayModalTx.amount)}</span>
                 </div>
                 <div>
                   <span className="text-emerald-700 font-semibold block">Outstanding Balance</span>
                   <span className="text-sm font-black text-indigo-900">
-                    ₹{(repayModalTx.loanBalance !== undefined ? repayModalTx.loanBalance : (repayModalTx.amount - (repayModalTx.amountReturned || 0))).toLocaleString()}
+                    {formatINR((repayModalTx.loanBalance !== undefined ? repayModalTx.loanBalance : (repayModalTx.amount - (repayModalTx.amountReturned || 0))))}
                   </span>
                 </div>
               </div>

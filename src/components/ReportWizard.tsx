@@ -16,7 +16,7 @@ import {
 } from "../types";
 import { CHAPTERS, DISTRICTS } from "../mockData";
 import { FINANCIAL_UNITS, getReadableFinancialUnitIds, getUserFinancialUnitId } from "../utils/financialUnits";
-import { formatDateDMY } from "../utils/formatters";
+import { formatDateDMY, formatINR } from "../utils/formatters";
 import {
   ArrowLeft,
   ArrowDownRight,
@@ -113,8 +113,8 @@ export default function ReportWizard({
 
   const steps = useMemo(() => {
     const list = [
-      ...(currentUser.level === OrgLevel.Local ? [] : [{ id: "units", title: "Which financial units?", sub: "Select exactly the units to include. Parents and descendants are never added automatically." }]),
-      { id: "period", title: "Which period do you need?", sub: "Pick the time span this report should cover." },
+      ...(currentUser.level === OrgLevel.Local ? [] : [{ id: "units", title: "Which chapters?", sub: "Select exactly the chapters to include. Parents and descendants are never added automatically." }]),
+      { id: "period", title: "Report Period", sub: "Pick the time span this report should cover." },
       { id: "sections", title: "What should the report contain?", sub: "Choose one, or select several to combine them." },
     ];
     if (needsHeadStep) {
@@ -356,7 +356,7 @@ export default function ReportWizard({
 
   // --- Step gating ---
   const isStepValid = () => {
-    if (currentStepConfig.id === "units") return selectedFinancialUnitIds.length > 0;
+    if (currentStepConfig.id === "units") return true; // selecting none is valid and yields an empty report
     if (currentStepConfig.id === "period") return dateWindow !== null;
     if (currentStepConfig.id === "sections") return sections.length > 0;
     return true; // heads step is optional; result step has no Next
@@ -435,7 +435,7 @@ export default function ReportWizard({
                     .map((c) => {
                       const v = c.value(row, idx);
                       const align = c.money || c.numeric ? ' class="num"' : "";
-                      const text = c.money ? `₹${Number(v || 0).toLocaleString("en-IN")}` : v;
+                      const text = c.money ? formatINR(Number(v || 0)) : v;
                       return `<td${align}>${text}</td>`;
                     })
                     .join("")}</tr>`
@@ -446,7 +446,7 @@ export default function ReportWizard({
           ? `<tfoot>${block.totals
               .map(
                 (t) =>
-                  `<tr><td colspan="${block.columns.length - 1}">${t.label}</td><td class="num">₹${t.value.toLocaleString("en-IN")}</td></tr>`
+                  `<tr><td colspan="${block.columns.length - 1}">${t.label}</td><td class="num">${formatINR(t.value)}</td></tr>`
               )
               .join("")}</tfoot>`
           : "";
@@ -541,14 +541,14 @@ export default function ReportWizard({
                   >
                     <span>
                       <span className={`text-sm font-bold block ${active ? "text-teal-900" : "text-slate-800"}`}>{unit.name}</span>
-                      <span className="text-[10px] text-slate-500 block mt-0.5">{unit.level} financial unit</span>
+                      <span className="text-[10px] text-slate-500 block mt-0.5">{unit.level} chapter</span>
                     </span>
                     {active && <Check className="h-4 w-4 text-[#0F6E5D] shrink-0" />}
                   </button>
                 );
               })}
             </div>
-            <p className="text-[11px] text-slate-500">Selections are exact. Selecting a parent never adds its children, and selecting a child never adds its parent.</p>
+            <p className="text-[11px] text-slate-500">Selections are exact. Selecting a parent never adds its children, and selecting a child never adds its parent. If you select none, the report will include no chapters.</p>
           </div>
         )}
 
@@ -586,60 +586,54 @@ export default function ReportWizard({
 
             {periodType === "year" && (
               <div className="space-y-2 pt-1">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Select financial year</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Year</label>
+                <select
+                  value={selectedYear ?? ""}
+                  onChange={(e) => setSelectedYear(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full sm:w-64 px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0F6E5D] cursor-pointer"
+                >
+                  <option value="">Select financial year</option>
                   {yearOptions.map((y) => (
-                    <button
-                      key={y}
-                      type="button"
-                      onClick={() => setSelectedYear(y)}
-                      className={`px-3 py-2.5 rounded-xl border-2 text-sm font-bold transition-all cursor-pointer ${
-                        selectedYear === y ? "border-[#0F6E5D] bg-teal-50 text-teal-900" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-                      }`}
-                    >
+                    <option key={y} value={y}>
                       {y}–{String(y + 1).slice(2)}
-                    </button>
+                    </option>
                   ))}
-                </div>
+                </select>
                 <p className="text-[10px] text-slate-500">Indian financial year runs 1 April to 31 March.</p>
               </div>
             )}
 
             {periodType === "month" && (
-              <div className="space-y-3 pt-1">
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Year</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    {yearOptions.map((y) => (
-                      <button
-                        key={y}
-                        type="button"
-                        onClick={() => setSelectedYear(y)}
-                        className={`px-3 py-2.5 rounded-xl border-2 text-sm font-bold transition-all cursor-pointer ${
-                          selectedYear === y ? "border-[#0F6E5D] bg-teal-50 text-teal-900" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-                        }`}
-                      >
-                        {y}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-2">
+              <div className="flex flex-col sm:flex-row gap-3 pt-1">
+                <div className="flex-1 space-y-2">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Month</label>
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  <select
+                    value={selectedMonth ?? ""}
+                    onChange={(e) => setSelectedMonth(e.target.value ? Number(e.target.value) : null)}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0F6E5D] cursor-pointer"
+                  >
+                    <option value="">Select month</option>
                     {MONTH_NAMES.map((m, i) => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => setSelectedMonth(i)}
-                        className={`px-2 py-2 rounded-xl border-2 text-xs font-bold transition-all cursor-pointer ${
-                          selectedMonth === i ? "border-[#0F6E5D] bg-teal-50 text-teal-900" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-                        }`}
-                      >
-                        {m.slice(0, 3)}
-                      </button>
+                      <option key={m} value={i}>
+                        {m}
+                      </option>
                     ))}
-                  </div>
+                  </select>
+                </div>
+                <div className="flex-1 space-y-2">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Year</label>
+                  <select
+                    value={selectedYear ?? ""}
+                    onChange={(e) => setSelectedYear(e.target.value ? Number(e.target.value) : null)}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0F6E5D] cursor-pointer"
+                  >
+                    <option value="">Select year</option>
+                    {yearOptions.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             )}
@@ -812,6 +806,12 @@ export default function ReportWizard({
               <span className="text-slate-500 ml-auto">{scopeLabel}</span>
             </div>
 
+            {currentUser.level !== OrgLevel.Local && selectedFinancialUnitIds.length === 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs font-semibold text-amber-800">
+                No chapters were selected, so this report is empty.
+              </div>
+            )}
+
             {resultBlocks.map((block) => (
               <div key={block.key} className="space-y-2">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -825,7 +825,7 @@ export default function ReportWizard({
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-bold text-slate-700">
                       {block.totals.map((t) => (
                         <span key={t.label}>
-                          {t.label}: <span className="text-slate-900 font-black">₹{t.value.toLocaleString("en-IN")}</span>
+                          {t.label}: <span className="text-slate-900 font-black">{formatINR(t.value)}</span>
                         </span>
                       ))}
                     </div>
@@ -866,7 +866,7 @@ export default function ReportWizard({
                                       : "text-slate-700"
                                   }`}
                                 >
-                                  {c.money ? `₹${Number(v || 0).toLocaleString("en-IN")}` : v}
+                                  {c.money ? formatINR(Number(v || 0)) : v}
                                 </td>
                               );
                             })}
