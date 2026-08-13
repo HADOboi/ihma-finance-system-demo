@@ -55,7 +55,7 @@ const MONTH_NAMES = [
 const SECTION_OPTIONS: { id: ReportSection; label: string; sub: string; icon: typeof Users }[] = [
   { id: "income", label: "Income", sub: "Receipts collected", icon: ArrowDownRight },
   { id: "expense", label: "Expense", sub: "Payments made", icon: ArrowUpRight },
-  { id: "loans", label: "Loans", sub: "Loans given & repayments", icon: Briefcase },
+  { id: "loans", label: "Internal Loans", sub: "Internal loans given & repayments", icon: Briefcase },
   { id: "assets", label: "Assets", sub: "Capital asset register", icon: Building2 },
   { id: "fd", label: "FD", sub: "Fixed deposits", icon: Landmark },
   { id: "members", label: "Members", sub: "Doctor directory", icon: Users },
@@ -233,7 +233,7 @@ export default function ReportWizard({
       const rows = ledgerRows.filter((tx) => tx.type === HeadType.Loan);
       blocks.push({
         key: "loans",
-        title: "Loans",
+        title: "Internal Loans",
         rows,
         totals: [
           { label: "Total disbursed", value: rows.reduce((sum, tx) => sum + tx.amount, 0) },

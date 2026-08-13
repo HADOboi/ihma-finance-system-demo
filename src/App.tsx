@@ -31,6 +31,10 @@ import {
   Briefcase,
   FileText,
   DollarSign,
+  ArrowUpRight,
+  ArrowDownRight,
+  Building2,
+  Landmark,
 } from "lucide-react";
 
 export default function App() {
@@ -425,7 +429,7 @@ export default function App() {
                     {/* Right Side: Logged in as Name & Role */}
                     <div className="sm:text-right bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-xl border border-white/20 shrink-0 sm:justify-self-end w-full sm:w-auto">
                       <span className="text-[10px] text-teal-200 uppercase tracking-widest font-bold block">
-                        Logged in as
+                        Logged by
                       </span>
                       <span className="text-xs sm:text-sm font-bold text-white block">
                         {currentUser.name}
@@ -451,8 +455,8 @@ export default function App() {
                   >
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 w-full">
                       <div className="flex items-center gap-3.5">
-                        <div className="w-11 h-11 rounded-2xl bg-white/15 border border-white/25 text-white flex items-center justify-center text-2xl shrink-0 group-hover:scale-105 transition-transform">
-                          📊
+                        <div className="w-11 h-11 rounded-2xl bg-white/15 border border-white/25 text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                          <BarChart3 className="h-6 w-6" />
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
@@ -483,8 +487,8 @@ export default function App() {
                         className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs hover:border-teal-500 hover:shadow-xs transition-all text-left flex items-center justify-between cursor-pointer group"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center text-lg shrink-0">
-                            🧾
+                          <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+                            <ArrowUpRight className="h-5 w-5" />
                           </div>
                           <div>
                             <h4 className="font-bold text-sm text-slate-900 group-hover:text-teal-800 transition-colors">
@@ -502,8 +506,8 @@ export default function App() {
                         className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs hover:border-teal-500 hover:shadow-xs transition-all text-left flex items-center justify-between cursor-pointer group"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center text-lg shrink-0">
-                            💰
+                          <div className="w-10 h-10 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
+                            <ArrowDownRight className="h-5 w-5" />
                           </div>
                           <div>
                             <h4 className="font-bold text-sm text-slate-900 group-hover:text-teal-800 transition-colors">
@@ -521,14 +525,14 @@ export default function App() {
                         className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs hover:border-teal-500 hover:shadow-xs transition-all text-left flex items-center justify-between cursor-pointer group"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center text-lg shrink-0">
-                            💼
+                          <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0">
+                            <Briefcase className="h-5 w-5" />
                           </div>
                           <div>
                             <h4 className="font-bold text-sm text-slate-900 group-hover:text-teal-800 transition-colors">
-                              Temporary Loans
+                              Internal Loans
                             </h4>
-                            <p className="text-[11px] text-slate-500">Loan Registry & Balances</p>
+                            <p className="text-[11px] text-slate-500">Internal Loan Registry & Balances</p>
                           </div>
                         </div>
                         <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-teal-600 group-hover:translate-x-1 transition-transform" />
@@ -540,8 +544,8 @@ export default function App() {
                         className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs hover:border-teal-500 hover:shadow-xs transition-all text-left flex items-center justify-between cursor-pointer group"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center text-lg shrink-0">
-                            👥
+                          <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                            <Users className="h-5 w-5" />
                           </div>
                           <div>
                             <h4 className="font-bold text-sm text-slate-900 group-hover:text-teal-800 transition-colors">
@@ -559,8 +563,8 @@ export default function App() {
                         className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs hover:border-teal-500 hover:shadow-xs transition-all text-left flex items-center justify-between cursor-pointer group"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-sky-50 text-sky-700 flex items-center justify-center text-lg shrink-0">
-                            🏢
+                          <div className="w-10 h-10 rounded-lg bg-sky-50 text-sky-700 flex items-center justify-center shrink-0">
+                            <Building2 className="h-5 w-5" />
                           </div>
                           <div>
                             <h4 className="font-bold text-sm text-slate-900 group-hover:text-teal-800 transition-colors">
@@ -578,8 +582,8 @@ export default function App() {
                         className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs hover:border-teal-500 hover:shadow-xs transition-all text-left flex items-center justify-between cursor-pointer group"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center text-lg shrink-0">
-                            📜
+                          <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center shrink-0">
+                            <Landmark className="h-5 w-5" />
                           </div>
                           <div>
                             <h4 className="font-bold text-sm text-slate-900 group-hover:text-teal-800 transition-colors">

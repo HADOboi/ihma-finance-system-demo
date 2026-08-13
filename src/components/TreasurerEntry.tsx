@@ -46,6 +46,13 @@ import {
   AlertTriangle,
   X,
   Phone,
+  Lock,
+  Wallet,
+  Landmark,
+  Building2,
+  BarChart3,
+  ArrowUpRight,
+  ArrowDownRight,
 } from "lucide-react";
 
 interface TreasurerEntryProps {
@@ -84,8 +91,9 @@ export default function TreasurerEntry({
   onOpenReports,
 }: TreasurerEntryProps) {
   // Determine chapter details
-  const defaultChapterId = getUserFinancialUnitId(currentUser);
-  const defaultChapterName = getFinancialUnitName(defaultChapterId);
+  const userUnitId = getUserFinancialUnitId(currentUser);
+  const defaultChapterId = getChapterCode(userUnitId);
+  const defaultChapterName = getFinancialUnitName(userUnitId);
 
   // Active Wizard Mode
   const [activeWizard, setActiveWizard] = useState<EntryWizardType>(null);
@@ -425,30 +433,30 @@ export default function TreasurerEntry({
       const isOthers = formData.category === "others";
 
       const steps = [
-        { id: "date", title: "Select Receipt Date", sub: "Select receipt date." },
-        { id: "category", title: "Select Income Head", sub: "Choose the income category for this receipt." },
+        { id: "date", title: "Select Receipt Date", sub: "" },
+        { id: "category", title: "Select Income Head", sub: "" },
       ];
 
       if (isMembership) {
         steps.push(
-          { id: "membership_tier", title: "Select Membership Tier", sub: "Choose subscription plan tier." }
+          { id: "membership_tier", title: "Select Membership Tier", sub: "" }
         );
       }
 
       if (isOthers) {
         steps.push(
-          { id: "other_category_text", title: "Specify Income Category", sub: "Optionally enter custom category description." }
+          { id: "other_category_text", title: "Specify Income Category", sub: "" }
         );
       }
 
       steps.push(
-        { id: "payment_mode", title: "Select Mode of Payment", sub: "Choose cash drawer or bank transaction." },
-        { id: "amount", title: "Offered & Paid Amount", sub: "Select preset amounts or enter custom amounts." },
-        { id: "remarks", title: "Enter Remarks / Notes", sub: "Optional additional notes for this receipt." },
-        { id: "collected_by", title: "Who collected this income?", sub: "Search doctor name or choose guest/non-registered option." },
-        { id: "paid_by", title: "Who paid this amount?", sub: "Search IHMA member doctor (stores Member ID) or select guest." },
-        { id: "voucher_number", title: "Voucher Number", sub: "Enter the Receipt Voucher (RV) number for this transaction." },
-        { id: "review", title: "Review & Save Receipt Entry", sub: "Verify all receipt details and auto-fetched chapter ID before saving." }
+        { id: "payment_mode", title: "Select Mode of Payment", sub: "" },
+        { id: "amount", title: "Receivable and Received Amount", sub: "" },
+        { id: "remarks", title: "Remarks / Notes", sub: "" },
+        { id: "collected_by", title: "Who collected this income?", sub: "" },
+        { id: "paid_by", title: "Who paid this amount?", sub: "" },
+        { id: "voucher_number", title: "Voucher Number", sub: "" },
+        { id: "review", title: "Review and Save", sub: "" }
       );
       return steps;
     }
@@ -460,99 +468,97 @@ export default function TreasurerEntry({
       const isOthers = formData.category === "others";
 
       const steps = [
-        { id: "date", title: "Select Payment Date", sub: "Select payment date." },
-        { id: "category", title: "Select Expense Head", sub: "Choose the matching expense account head." },
+        { id: "date", title: "Select Payment Date", sub: "" },
+        { id: "category", title: "Select Expense Head", sub: "" },
       ];
 
       if (isDigitalMedia) {
         steps.push(
-          { id: "digital_media_type", title: "Select Digital Media Type", sub: "Choose Website, Application, or Posters." }
+          { id: "digital_media_type", title: "Select Digital Media Type", sub: "" }
         );
         if (isWebsiteOrApp) {
           steps.push(
-            { id: "digital_media_charge", title: "Select Charge Type", sub: "Choose Development, Annual Maintenance, or Upgrade charge." }
+            { id: "digital_media_charge", title: "Select Charge Type", sub: "" }
           );
         }
       }
 
       if (isOthers) {
         steps.push(
-          { id: "other_category_text", title: "Specify Expense Category", sub: "Optionally enter custom category description." }
+          { id: "other_category_text", title: "Specify Expense Category", sub: "" }
         );
       }
 
       steps.push(
-        { id: "payment_mode", title: "Select Mode of Payment", sub: "Choose cash drawer or bank transaction." },
-        { id: "amount", title: "Payable & Paid Amount", sub: "Specify full payable sum and actual paid amount." },
-        { id: "remarks", title: "Enter Remarks / Notes", sub: "Optional additional notes for this expense." },
-        { id: "paid_by", title: "Who paid this expense?", sub: "Search doctor, treasurer, or enter payer name." },
-        { id: "paid_to", title: "Who was this paid to?", sub: "Search payee doctor, vendor, or enter custom party name." },
-        { id: "voucher_number", title: "Voucher Number", sub: "Enter the Payment Voucher (PV) number for this transaction." },
-        { id: "review", title: "Review & Save Expense Entry", sub: "Verify all voucher details and auto-fetched chapter ID before saving." }
+        { id: "payment_mode", title: "Select Mode of Payment", sub: "" },
+        { id: "amount", title: "Payable and Paid Amount", sub: "" },
+        { id: "remarks", title: "Remarks / Notes", sub: "" },
+        { id: "paid_by", title: "Who paid this expense?", sub: "" },
+        { id: "paid_to", title: "Who was this paid to?", sub: "" },
+        { id: "voucher_number", title: "Voucher Number", sub: "" },
+        { id: "review", title: "Review and Save", sub: "" }
       );
       return steps;
     }
 
     if (activeWizard === "loan") {
       return [
-        { id: "date", title: "Select Loan Date", sub: "Select loan disbursement date." },
-        { id: "paid_to", title: "Paid To Chapter", sub: "Search & select chapter entity (loans are given only to chapters)." },
-        { id: "particulars", title: "Loan Particulars", sub: "Enter loan details or event advance purpose." },
-        { id: "payment_mode", title: "Mode of Payment", sub: "Select payment mode for loan disbursement (Cash or Bank)." },
-        { id: "amount", title: "Loan Amount", sub: "Specify principal sum disbursed." },
-        { id: "remarks", title: "Remarks / Notes", sub: "Optional notes for this loan voucher." },
-        { id: "loan_return_date", title: "Agreed Return Date", sub: "Set expected repayment deadline date." },
-        { id: "voucher_number", title: "Voucher Number", sub: "Enter the Loan Voucher (LV) number for this transaction." },
-        { id: "review", title: "Review & Register Loan", sub: "Audit loan parameters before confirming." },
+        { id: "date", title: "Select Loan Date", sub: "" },
+        { id: "paid_to", title: "Paid To Chapter", sub: "" },
+        { id: "particulars", title: "Loan Particulars", sub: "" },
+        { id: "payment_mode", title: "Mode of Payment", sub: "" },
+        { id: "amount", title: "Loan Amount", sub: "" },
+        { id: "remarks", title: "Remarks / Notes", sub: "" },
+        { id: "loan_return_date", title: "Agreed Return Date", sub: "" },
+        { id: "voucher_number", title: "Voucher Number", sub: "" },
+        { id: "review", title: "Review and Save", sub: "" },
       ];
     }
 
     if (activeWizard === "member") {
       return [
-        { id: "member_basic", title: "Doctor's Name & Demographics", sub: "Doctor name, gender, blood group & date of birth." },
-        { id: "member_qualifications", title: "Academic Degrees & Qualifications", sub: "Add each degree with its council and registration details." },
-        { id: "member_practice", title: "Clinical Specialty & Address", sub: "Clinical practice specialty, clinic & home address." },
-        { id: "member_contact", title: "Contact Information", sub: "Mobile number, WhatsApp, email, and clinic contact numbers." },
-        { id: "review", title: "Review & Register Doctor Profile", sub: "Audit and verify doctor profile before saving to directory." },
+        { id: "member_basic", title: "Doctor's Name & Demographics", sub: "" },
+        { id: "member_qualifications", title: "Academic Degrees & Qualifications", sub: "" },
+        { id: "member_practice", title: "Clinical Specialty & Address", sub: "" },
+        { id: "member_contact", title: "Contact Information", sub: "" },
+        { id: "review", title: "Review and Save", sub: "" },
       ];
     }
 
     if (activeWizard === "asset") {
       return [
-        { id: "asset_purchase_date", title: "Asset Purchase Date", sub: "Date the asset was originally purchased." },
-        { id: "asset_category", title: "Asset Category", sub: "Select the capital asset category." },
-        { id: "asset_name", title: "Asset Name", sub: "Identify the physical capital asset." },
-        { id: "asset_quantity", title: "Number of Items", sub: "How many identical items were purchased." },
-        { id: "asset_value", title: "Asset Value", sub: "Price of a single item; total is auto-calculated." },
-        { id: "asset_payment_mode", title: "Mode of Payment", sub: "How this asset was paid for." },
-        { id: "asset_life", title: "Asset Life", sub: "Useful life in years; drives annual depreciation." },
-        { id: "asset_custodian", title: "Custodian Name", sub: "Person responsible for this asset." },
-        { id: "asset_remarks", title: "Remarks / Notes", sub: "Optional notes for this asset record." },
-        { id: "review", title: "Review & Save Asset Entry", sub: "Confirm asset register record before saving." },
+        { id: "asset_purchase_date", title: "Asset Purchase Date", sub: "" },
+        { id: "asset_category", title: "Asset Category", sub: "" },
+        { id: "asset_name", title: "Asset Name", sub: "" },
+        { id: "asset_quantity", title: "Number of Items", sub: "" },
+        { id: "asset_value", title: "Asset Value", sub: "" },
+        { id: "asset_payment_mode", title: "Mode of Payment", sub: "" },
+        { id: "asset_life", title: "Asset Life", sub: "" },
+        { id: "asset_custodian", title: "Custodian Name", sub: "" },
+        { id: "asset_remarks", title: "Remarks / Notes", sub: "" },
+        { id: "review", title: "Review and Save", sub: "" },
       ];
     }
 
     if (activeWizard === "bank_balance") {
-      // The amount type splits the flow: a fixed deposit collects the deposit and
-      // bank details, while bank interest only needs the amount actually received.
       if (formData.amountType === "Bank Interest") {
         return [
-          { id: "fd_date", title: "Select Date", sub: "Date the interest was credited by the bank." },
-          { id: "fd_amount_type", title: "Amount Type", sub: "Fixed deposit or bank interest received." },
-          { id: "fd_interest_amount", title: "Interest Amount", sub: "Exact interest amount credited, as per the bank." },
-          { id: "fd_remarks", title: "Remarks / Notes", sub: "Optional notes for this interest credit." },
-          { id: "review", title: "Review & Save Bank Interest", sub: "Confirm the interest received." },
+          { id: "fd_date", title: "Select Date", sub: "" },
+          { id: "fd_amount_type", title: "Amount Type", sub: "" },
+          { id: "fd_interest_amount", title: "Interest Amount", sub: "" },
+          { id: "fd_remarks", title: "Remarks / Notes", sub: "" },
+          { id: "review", title: "Review and Save", sub: "" },
         ];
       }
 
       return [
-        { id: "fd_date", title: "Select Date", sub: "Date the fixed deposit was opened." },
-        { id: "fd_amount_type", title: "Amount Type", sub: "Fixed deposit or bank interest received." },
-        { id: "balance_amount", title: "FD Amount", sub: "Principal deposited in INR." },
-        { id: "fd_term", title: "FD Term & Maturity Date", sub: "FD term in years and auto-computed maturity date." },
-        { id: "fd_bank_details", title: "Bank Details", sub: "Account number, bank, branch, branch address and contact number." },
-        { id: "fd_remarks", title: "Remarks / Notes", sub: "Optional notes for this deposit." },
-        { id: "review", title: "Review & Save FD Entry", sub: "Confirm fixed deposit record." },
+        { id: "fd_date", title: "Select Date", sub: "" },
+        { id: "fd_amount_type", title: "Amount Type", sub: "" },
+        { id: "balance_amount", title: "FD Amount", sub: "" },
+        { id: "fd_term", title: "FD Term & Maturity Date", sub: "" },
+        { id: "fd_bank_details", title: "Bank Details", sub: "" },
+        { id: "fd_remarks", title: "Remarks / Notes", sub: "" },
+        { id: "review", title: "Review and Save", sub: "" },
       ];
     }
 
@@ -808,8 +814,8 @@ export default function TreasurerEntry({
     } else if (activeWizard === "asset" && onAddAsset) {
       onAddAsset({
         date: formData.purchaseDate || todayStr,
-        chapterIdInput: formData.chapterId,
-        chapterNameInput: formData.chapterName,
+        chapterIdInput: formData.chapterId || defaultChapterId,
+        chapterNameInput: formData.chapterName || defaultChapterName,
         assetId: formData.assetNumber || generateAssetNumber(),
         assetName: formData.assetName,
         purchaseDate: formData.purchaseDate,
@@ -850,8 +856,8 @@ export default function TreasurerEntry({
     } else if (activeWizard === "bank_balance" && onAddBankBalance) {
       onAddBankBalance({
         date: formData.date || todayStr,
-        chapterIdInput: formData.chapterId,
-        chapterNameInput: formData.chapterName,
+        chapterIdInput: formData.chapterId || defaultChapterId,
+        chapterNameInput: formData.chapterName || defaultChapterName,
         amountType: "FD",
         amount: Number(formData.amount),
         depositedBy: formData.depositedBy?.trim() || undefined,
@@ -887,7 +893,7 @@ export default function TreasurerEntry({
     { key: "printing_stationery", label: "Printing & Stationary", sub: "Certificates, banners, registers & stationery", icon: "🖨️" },
     { key: "postage", label: "Postage", sub: "Courier, registered mail & postal charges", icon: "📮" },
     { key: "digital_media", label: "Digital Media", sub: "Website, Application, Posters with sub-charges", icon: "💻" },
-    { key: "bank_expense", label: "Bank Expense", sub: "Bank ledger charges, cheque book fees", icon: "🏦" },
+    { key: "bank_expense", label: "Bank charges", sub: "Bank ledger charges, cheque book fees", icon: "🏦" },
     { key: "others", label: "Others", sub: "Unclassified or custom expense category", icon: "📎" },
   ];
 
@@ -928,7 +934,7 @@ export default function TreasurerEntry({
               {/* Right Side: Logged in as Name & Role */}
               <div className="sm:text-right bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-xl border border-white/20 shrink-0 sm:justify-self-end w-full sm:w-auto">
                 <span className="text-[10px] text-teal-200 uppercase tracking-widest font-bold block">
-                  Logged in as
+                  Logged by
                 </span>
                 <span className="text-xs sm:text-sm font-bold text-white block">
                   {currentUser.name}
@@ -966,118 +972,100 @@ export default function TreasurerEntry({
               </div>
             </button>
 
-            {/* 1. Log Income */}
+            {/* 1. Add Receipt (Income) */}
             <button
               onClick={() => handleStartWizard("income")}
               className="group bg-white p-5 rounded-2xl border border-teal-100 shadow-xs hover:shadow-md hover:border-teal-500 transition-all text-left flex flex-col justify-between cursor-pointer"
             >
-              <div>
-                <div className="w-12 h-12 rounded-xl bg-teal-50 text-teal-800 flex items-center justify-center text-2xl mb-3 group-hover:scale-105 transition-transform">
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 rounded-xl bg-teal-50 text-teal-800 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
                   💰
                 </div>
-                <h3 className="font-bold text-base text-slate-900 group-hover:text-teal-800 transition-colors">
-                  Log Income / Receipt
-                </h3>
+                <ChevronRight className="h-5 w-5 text-teal-600 group-hover:translate-x-1 transition-transform" />
               </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-teal-700">
-                <span>Start Receipt Wizard</span>
-                <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </div>
+              <h3 className="font-bold text-base text-slate-900 group-hover:text-teal-800 transition-colors mt-4">
+                Add Receipt (Income)
+              </h3>
             </button>
 
-            {/* 2. Log Expense */}
+            {/* 2. Add Payment (Expense) */}
             <button
               onClick={() => handleStartWizard("expense")}
               className="group bg-white p-5 rounded-2xl border border-amber-100 shadow-xs hover:shadow-md hover:border-amber-500 transition-all text-left flex flex-col justify-between cursor-pointer"
             >
-              <div>
-                <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center text-2xl mb-3 group-hover:scale-105 transition-transform">
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
                   🧾
                 </div>
-                <h3 className="font-bold text-base text-slate-900 group-hover:text-amber-800 transition-colors">
-                  Log Expense / Payment
-                </h3>
+                <ChevronRight className="h-5 w-5 text-amber-600 group-hover:translate-x-1 transition-transform" />
               </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-amber-700">
-                <span>Start Payment Wizard</span>
-                <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </div>
+              <h3 className="font-bold text-base text-slate-900 group-hover:text-amber-800 transition-colors mt-4">
+                Add Payment (Expense)
+              </h3>
             </button>
 
-            {/* 3. Loans Dashboard */}
+            {/* 3. Internal Loans Dashboard */}
             <button
               onClick={() => handleStartWizard("loans_dashboard")}
               className="group bg-white p-5 rounded-2xl border border-indigo-100 shadow-xs hover:shadow-md hover:border-indigo-500 transition-all text-left flex flex-col justify-between cursor-pointer"
             >
-              <div>
-                <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-800 flex items-center justify-center text-2xl mb-3 group-hover:scale-105 transition-transform">
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-800 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
                   💼
                 </div>
-                <h3 className="font-bold text-base text-slate-900 group-hover:text-indigo-800 transition-colors">
-                  Loans
-                </h3>
+                <ChevronRight className="h-5 w-5 text-indigo-600 group-hover:translate-x-1 transition-transform" />
               </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-indigo-700">
-                <span>Loans Dashboard</span>
-                <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </div>
+              <h3 className="font-bold text-base text-slate-900 group-hover:text-indigo-800 transition-colors mt-4">
+                Internal Loans Dashboard
+              </h3>
             </button>
 
-            {/* 4. Register Member */}
+            {/* 4. Add Member */}
             <button
               onClick={() => handleStartWizard("member")}
               className="group bg-white p-5 rounded-2xl border border-emerald-100 shadow-xs hover:shadow-md hover:border-emerald-500 transition-all text-left flex flex-col justify-between cursor-pointer"
             >
-              <div>
-                <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center text-2xl mb-3 group-hover:scale-105 transition-transform">
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
                   👥
                 </div>
-                <h3 className="font-bold text-base text-slate-900 group-hover:text-emerald-800 transition-colors">
-                  Add New Member Profile
-                </h3>
+                <ChevronRight className="h-5 w-5 text-emerald-600 group-hover:translate-x-1 transition-transform" />
               </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-emerald-700">
-                <span>Add Member</span>
-                <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </div>
+              <h3 className="font-bold text-base text-slate-900 group-hover:text-emerald-800 transition-colors mt-4">
+                Add Member
+              </h3>
             </button>
 
-            {/* 5. Log Asset */}
+            {/* 5. Add Asset */}
             <button
               onClick={() => handleStartWizard("asset")}
               className="group bg-white p-5 rounded-2xl border border-sky-100 shadow-xs hover:shadow-md hover:border-sky-500 transition-all text-left flex flex-col justify-between cursor-pointer"
             >
-              <div>
-                <div className="w-12 h-12 rounded-xl bg-sky-50 text-sky-800 flex items-center justify-center text-2xl mb-3 group-hover:scale-105 transition-transform">
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 rounded-xl bg-sky-50 text-sky-800 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
                   🏢
                 </div>
-                <h3 className="font-bold text-base text-slate-900 group-hover:text-sky-800 transition-colors">
-                  Register Chapter Asset
-                </h3>
+                <ChevronRight className="h-5 w-5 text-sky-600 group-hover:translate-x-1 transition-transform" />
               </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-sky-700">
-                <span>Add Asset</span>
-                <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </div>
+              <h3 className="font-bold text-base text-slate-900 group-hover:text-sky-800 transition-colors mt-4">
+                Add Asset
+              </h3>
             </button>
 
-            {/* 6. Fixed Deposit (FD) */}
+            {/* 6. Add Fixed Deposit (FD) */}
             <button
               onClick={() => handleStartWizard("bank_balance")}
               className="group bg-white p-5 rounded-2xl border border-purple-100 shadow-xs hover:shadow-md hover:border-purple-500 transition-all text-left flex flex-col justify-between cursor-pointer"
             >
-              <div>
-                <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-800 flex items-center justify-center text-2xl mb-3 group-hover:scale-105 transition-transform">
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-800 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
                   📜
                 </div>
-                <h3 className="font-bold text-base text-slate-900 group-hover:text-purple-800 transition-colors">
-                  Log Fixed Deposit
-                </h3>
+                <ChevronRight className="h-5 w-5 text-purple-600 group-hover:translate-x-1 transition-transform" />
               </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-purple-700">
-                <span>Add FD</span>
-                <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </div>
+              <h3 className="font-bold text-base text-slate-900 group-hover:text-purple-800 transition-colors mt-4">
+                Add Fixed Deposit (FD)
+              </h3>
             </button>
           </div>
         </div>
@@ -1099,14 +1087,14 @@ export default function TreasurerEntry({
                 </button>
                 <span className="text-indigo-400 text-xs">•</span>
                 <span className="text-indigo-300 text-xs font-semibold uppercase tracking-wider">
-                  Treasurer Loan Ledger
+                  Treasurer Internal Loan Ledger
                 </span>
               </div>
               <h2 className="text-2xl font-bold font-display text-white">
-                Loans Dashboard
+                Internal Loans Dashboard
               </h2>
               <p className="text-xs text-indigo-200/80 mt-1">
-                Monitor chapter loans, track agreed return dates, and log loan repayments.
+                Monitor chapter internal loans, track agreed return dates, and log internal loan repayments.
               </p>
             </div>
 
@@ -1116,7 +1104,7 @@ export default function TreasurerEntry({
               className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer shrink-0 border border-indigo-400/30"
             >
               <Plus className="h-4 w-4" />
-              <span>Log New Loan</span>
+              <span>Add Internal Loan</span>
             </button>
           </div>
 
@@ -1132,10 +1120,10 @@ export default function TreasurerEntry({
                   </div>
                   <div className="max-w-md mx-auto space-y-1">
                     <h3 className="font-bold text-lg text-slate-900 font-display">
-                      No Loans Logged Yet
+                      No Internal Loans Logged Yet
                     </h3>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      There are no active or historical chapter loan disbursements recorded in this ledger.
+                      There are no active or historical chapter internal loan disbursements recorded in this ledger.
                     </p>
                   </div>
 
@@ -1146,7 +1134,7 @@ export default function TreasurerEntry({
                       className="inline-flex items-center gap-2 px-8 py-3.5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-indigo-800 hover:from-indigo-500 hover:to-indigo-700 text-white font-bold text-sm rounded-xl shadow-lg ring-4 ring-indigo-500/20 animate-pulse transition-all cursor-pointer"
                     >
                       <Plus className="h-5 w-5" />
-                      <span>Log New Loan</span>
+                      <span>Add Internal Loan</span>
                     </button>
                   </div>
                 </div>
@@ -1157,10 +1145,10 @@ export default function TreasurerEntry({
               <div className="space-y-4">
                 <div className="flex justify-between items-center px-1">
                   <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Recorded Chapter Loans ({loanList.length})
+                    Recorded Chapter Internal Loans ({loanList.length})
                   </h3>
                   <span className="text-xs text-slate-500 font-medium">
-                    Showing all active & settled loans
+                    Showing all active & settled internal loans
                   </span>
                 </div>
 
@@ -1330,7 +1318,7 @@ export default function TreasurerEntry({
                   className="text-xs text-indigo-300 hover:text-white flex items-center gap-1 font-semibold cursor-pointer"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
-                  <span>Loans Dashboard</span>
+                  <span>Internal Loans Dashboard</span>
                 </button>
               </div>
               <h3 className="text-xl font-bold font-display text-white">
@@ -1680,7 +1668,7 @@ export default function TreasurerEntry({
           {/* SUCCESS SCREEN */}
           {isSuccess ? (
             <div className="p-8 text-center space-y-6">
-              <div className="w-20 h-20 bg-teal-50 text-teal-700 rounded-full flex items-center justify-center text-4xl mx-auto shadow-inner border border-teal-100 animate-bounce">
+              <div className="w-20 h-20 bg-teal-50 text-teal-700 rounded-full flex items-center justify-center text-4xl mx-auto shadow-inner border border-teal-100">
                 ✓
               </div>
               <div>
@@ -1722,12 +1710,12 @@ export default function TreasurerEntry({
 
                 <div className="text-center min-w-0 flex-1 px-1">
                   <h3 className="font-bold text-xs sm:text-sm text-slate-900 font-display truncate">
-                    {activeWizard === "income" && "Log Income / Receipt"}
-                    {activeWizard === "expense" && "Log Expense / Payment"}
-                    {activeWizard === "loan" && "Log Loan / Disbursement"}
-                    {activeWizard === "member" && "Register Member Profile"}
-                    {activeWizard === "asset" && "Register Chapter Asset"}
-                    {activeWizard === "bank_balance" && "Log Fixed Deposit (FD)"}
+                    {activeWizard === "income" && "Add Receipt (Income)"}
+                    {activeWizard === "expense" && "Add Payment (Expense)"}
+                    {activeWizard === "loan" && "Add Internal Loan"}
+                    {activeWizard === "member" && "Add Member"}
+                    {activeWizard === "asset" && "Add Asset"}
+                    {activeWizard === "bank_balance" && "Add Fixed Deposit (FD)"}
                   </h3>
                   <p className="text-[10px] text-slate-500 font-medium truncate">
                     {defaultChapterName}
@@ -1749,16 +1737,6 @@ export default function TreasurerEntry({
                     }`}
                   />
                 ))}
-              </div>
-
-              {/* Step Question Header */}
-              <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-2">
-                <h2 className="text-lg sm:text-xl font-extrabold font-display text-slate-900 leading-snug">
-                  {currentStepConfig.title}
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                  {currentStepConfig.sub}
-                </p>
               </div>
 
               {/* Step Content Workspace */}
@@ -1785,7 +1763,7 @@ export default function TreasurerEntry({
                             onClick={() => setFormData({ ...formData, date: new Date().toISOString().slice(0, 10) })}
                             className="px-4 py-3 bg-teal-50 text-teal-800 text-xs font-bold rounded-xl border border-teal-200 hover:bg-teal-100 cursor-pointer"
                           >
-                            Set Today
+                            Today
                           </button>
                         </div>
                       </div>
@@ -2054,41 +2032,49 @@ export default function TreasurerEntry({
 
                     {/* Step: Income Head Category */}
                     {currentStepConfig.id === "category" && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {incomeHeads.map((head) => (
-                          <div
-                            key={head.key}
-                            onClick={() => setFormData({ ...formData, category: head.key })}
-                            className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                              formData.category === head.key
-                                ? "border-[#0F6E5D] bg-[#E4F1EE]"
-                                : "border-slate-200 hover:border-slate-300 bg-white"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-2xl">{head.icon}</span>
-                              <div>
-                                <h4 className="font-bold text-sm text-slate-900">{head.label}</h4>
-                                <p className="text-[11px] text-slate-500">{head.sub}</p>
-                              </div>
-                            </div>
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Select Income Head
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {incomeHeads.map((head) => (
                             <div
-                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                              key={head.key}
+                              onClick={() => setFormData({ ...formData, category: head.key })}
+                              className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                                 formData.category === head.key
-                                  ? "border-[#0F6E5D] bg-[#0F6E5D] text-white"
-                                  : "border-slate-300 bg-white"
+                                  ? "border-[#0F6E5D] bg-[#E4F1EE]"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
                               }`}
                             >
-                              {formData.category === head.key && <Check className="h-3.5 w-3.5" />}
+                              <div className="flex items-center gap-3">
+                                <span className="text-2xl">{head.icon}</span>
+                                <div>
+                                  <h4 className="font-bold text-sm text-slate-900">{head.label}</h4>
+                                  <p className="text-[11px] text-slate-500">{head.sub}</p>
+                                </div>
+                              </div>
+                              <div
+                                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                  formData.category === head.key
+                                    ? "border-[#0F6E5D] bg-[#0F6E5D] text-white"
+                                    : "border-slate-300 bg-white"
+                                }`}
+                              >
+                                {formData.category === head.key && <Check className="h-3.5 w-3.5" />}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     )}
 
                     {/* Step: Membership Tier (When Membership is selected) */}
                     {currentStepConfig.id === "membership_tier" && (
                       <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Select Membership Tier
+                        </label>
                         {[
                           { key: "Silver (1 year)", label: "Silver", tenure: "1 Year", sub: "1 Year membership subscription", icon: "🥈" },
                           { key: "Gold (12 years)", label: "Gold", tenure: "12 Years", sub: "12 Years long-term membership", icon: "🥇" },
@@ -2132,8 +2118,8 @@ export default function TreasurerEntry({
                     {/* Step: Other Category Custom Field */}
                     {currentStepConfig.id === "other_category_text" && (
                       <div className="space-y-3">
-                        <label className="block text-xs font-bold text-slate-700">
-                          Optional: Specify Income Category Detail
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Specify Income Category Detail
                         </label>
                         <input
                           type="text"
@@ -2148,6 +2134,10 @@ export default function TreasurerEntry({
                     {/* Step: Offered & Paid Amount */}
                     {currentStepConfig.id === "amount" && (
                       <div className="space-y-4">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Receivable and Received Amount
+                        </label>
+
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                             Receivable Amount
@@ -2231,31 +2221,36 @@ export default function TreasurerEntry({
 
                     {/* Step: Payment Mode */}
                     {currentStepConfig.id === "payment_mode" && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div
-                          onClick={() => setFormData({ ...formData, paymentMode: "Cash" })}
-                          className={`p-5 rounded-2xl border-2 transition-all cursor-pointer text-center space-y-2 ${
-                            formData.paymentMode === "Cash"
-                              ? "border-[#0F6E5D] bg-[#E4F1EE] ring-2 ring-[#0F6E5D]/20"
-                              : "border-slate-200 hover:border-slate-300 bg-white"
-                          }`}
-                        >
-                          <div className="text-4xl">💵</div>
-                          <h4 className="font-bold text-base text-slate-900">Cash Payment</h4>
-                          <p className="text-xs text-slate-500">Physical cash received directly into chapter drawer.</p>
-                        </div>
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Select Mode of Payment
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div
+                            onClick={() => setFormData({ ...formData, paymentMode: "Cash" })}
+                            className={`p-5 rounded-2xl border-2 transition-all cursor-pointer text-center space-y-2 ${
+                              formData.paymentMode === "Cash"
+                                ? "border-[#0F6E5D] bg-[#E4F1EE] ring-2 ring-[#0F6E5D]/20"
+                                : "border-slate-200 hover:border-slate-300 bg-white"
+                            }`}
+                          >
+                            <div className="text-4xl">💵</div>
+                            <h4 className="font-bold text-base text-slate-900">Cash Payment</h4>
+                            <p className="text-xs text-slate-500">Physical cash received directly into chapter drawer.</p>
+                          </div>
 
-                        <div
-                          onClick={() => setFormData({ ...formData, paymentMode: "Bank" })}
-                          className={`p-5 rounded-2xl border-2 transition-all cursor-pointer text-center space-y-2 ${
-                            formData.paymentMode === "Bank"
-                              ? "border-[#0F6E5D] bg-[#E4F1EE] ring-2 ring-[#0F6E5D]/20"
-                              : "border-slate-200 hover:border-slate-300 bg-white"
-                          }`}
-                        >
-                          <div className="text-4xl">🏦</div>
-                          <h4 className="font-bold text-base text-slate-900">Bank Transfer / UPI</h4>
-                          <p className="text-xs text-slate-500">Direct bank deposit, UPI, GPay, Cheque, or NEFT/RTGS.</p>
+                          <div
+                            onClick={() => setFormData({ ...formData, paymentMode: "Bank" })}
+                            className={`p-5 rounded-2xl border-2 transition-all cursor-pointer text-center space-y-2 ${
+                              formData.paymentMode === "Bank"
+                                ? "border-[#0F6E5D] bg-[#E4F1EE] ring-2 ring-[#0F6E5D]/20"
+                                : "border-slate-200 hover:border-slate-300 bg-white"
+                            }`}
+                          >
+                            <div className="text-4xl">🏦</div>
+                            <h4 className="font-bold text-base text-slate-900">Bank Transfer / UPI</h4>
+                            <p className="text-xs text-slate-500">Direct bank deposit, UPI, GPay, Cheque, or NEFT/RTGS.</p>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -2264,7 +2259,7 @@ export default function TreasurerEntry({
                     {currentStepConfig.id === "remarks" && (
                       <div className="space-y-3">
                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                          Remarks / Notes (Blank Optional)
+                          Remarks / Notes
                         </label>
                         <textarea
                           rows={3}
@@ -2295,15 +2290,15 @@ export default function TreasurerEntry({
                             className="flex-1 px-3.5 py-3 text-sm font-mono font-semibold bg-transparent focus:outline-none"
                           />
                         </div>
-                        <p className="text-[11px] text-slate-500">
-                          Enter the physical/manual voucher number as recorded in the register.
-                        </p>
                       </div>
                     )}
 
                     {/* Step: Review & Save */}
                     {currentStepConfig.id === "review" && (
                       <div className="space-y-4">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Review and Save
+                        </label>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
                           <div className="flex justify-between py-1.5 border-b border-slate-200">
                             <span className="text-slate-500 font-semibold">Chapter Name:</span>
@@ -2367,13 +2362,6 @@ export default function TreasurerEntry({
                             <span className="font-mono font-bold text-slate-700">RV-{formData.voucherNumber}</span>
                           </div>
                         </div>
-
-                        <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 text-xs text-amber-900 flex items-center gap-2">
-                          <ShieldCheck className="h-4 w-4 shrink-0 text-amber-700" />
-                          <span>
-                            Audit Lock: Once recorded, original transaction entry cannot be directly altered.
-                          </span>
-                        </div>
                       </div>
                     )}
                   </>
@@ -2401,7 +2389,7 @@ export default function TreasurerEntry({
                             onClick={() => setFormData({ ...formData, date: new Date().toISOString().slice(0, 10) })}
                             className="px-4 py-3 bg-amber-50 text-amber-900 text-xs font-bold rounded-xl border border-amber-200 hover:bg-amber-100 cursor-pointer"
                           >
-                            Set Today
+                            Today
                           </button>
                         </div>
                       </div>
@@ -2575,45 +2563,55 @@ export default function TreasurerEntry({
 
                     {/* Step: Expense Head */}
                     {currentStepConfig.id === "category" && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {expenseHeads.map((head) => (
-                          <div
-                            key={head.key}
-                            onClick={() => setFormData({ ...formData, category: head.key })}
-                            className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                              formData.category === head.key
-                                ? "border-amber-600 bg-amber-50"
-                                : "border-slate-200 hover:border-slate-300 bg-white"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-2xl">{head.icon}</span>
-                              <div>
-                                <h4 className="font-bold text-sm text-slate-900">{head.label}</h4>
-                                <p className="text-[11px] text-slate-500">{head.sub}</p>
-                              </div>
-                            </div>
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Select Expense Head
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {expenseHeads.map((head) => (
                             <div
-                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                              key={head.key}
+                              onClick={() =>
+                                setFormData({
+                                  ...formData,
+                                  category: head.key,
+                                  paymentMode: head.key === "bank_expense" ? "Bank" : formData.paymentMode,
+                                })
+                              }
+                              className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                                 formData.category === head.key
-                                  ? "border-amber-600 bg-amber-600 text-white"
-                                  : "border-slate-300 bg-white"
+                                  ? "border-amber-600 bg-amber-50"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
                               }`}
                             >
-                              {formData.category === head.key && <Check className="h-3.5 w-3.5" />}
+                              <div className="flex items-center gap-3">
+                                <span className="text-2xl">{head.icon}</span>
+                                <div>
+                                  <h4 className="font-bold text-sm text-slate-900">{head.label}</h4>
+                                  <p className="text-[11px] text-slate-500">{head.sub}</p>
+                                </div>
+                              </div>
+                              <div
+                                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                  formData.category === head.key
+                                    ? "border-amber-600 bg-amber-600 text-white"
+                                    : "border-slate-300 bg-white"
+                                }`}
+                              >
+                                {formData.category === head.key && <Check className="h-3.5 w-3.5" />}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     )}
 
                     {/* Step: Digital Media Type (When Digital Media is selected) */}
                     {currentStepConfig.id === "digital_media_type" && (
                       <div className="space-y-3">
-                        <div className="text-xs font-semibold text-slate-600 bg-amber-50 p-3 rounded-lg border border-amber-200 text-amber-900 flex items-center gap-2">
-                          <Info className="h-4 w-4 shrink-0" />
-                          <span>Select digital media sub-category:</span>
-                        </div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Select Digital Media Type
+                        </label>
 
                         {[
                           { key: "Website", label: "Website", sub: "Web portal design, domain, or hosting", icon: "🌐" },
@@ -2653,10 +2651,9 @@ export default function TreasurerEntry({
                     {/* Step: Digital Media Charge Sub-options */}
                     {currentStepConfig.id === "digital_media_charge" && (
                       <div className="space-y-3">
-                        <div className="text-xs font-semibold text-slate-600 bg-amber-50 p-3 rounded-lg border border-amber-200 text-amber-900 flex items-center gap-2">
-                          <Info className="h-4 w-4 shrink-0" />
-                          <span>Select specific charge category for {formData.digitalMediaType}:</span>
-                        </div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Select Charge Type
+                        </label>
 
                         {[
                           { key: "Development charge", label: "Development Charge", sub: "Initial building, coding, or setup", icon: "🛠️" },
@@ -2696,8 +2693,8 @@ export default function TreasurerEntry({
                     {/* Step: Other Category Text */}
                     {currentStepConfig.id === "other_category_text" && (
                       <div className="space-y-3">
-                        <label className="block text-xs font-bold text-slate-700">
-                          Optional: Specify Expense Category Detail
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Specify Expense Category Detail
                         </label>
                         <input
                           type="text"
@@ -2712,6 +2709,10 @@ export default function TreasurerEntry({
                     {/* Step: Payable & Paid Amount */}
                     {currentStepConfig.id === "amount" && (
                       <div className="space-y-4">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Payable and Paid Amount
+                        </label>
+
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                             Payable Amount
@@ -2744,7 +2745,7 @@ export default function TreasurerEntry({
 
                         <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200">
                           <label className="block text-xs font-bold text-emerald-900 uppercase tracking-wider mb-1">
-                            Amount Actually Paid
+                            Paid Amount
                           </label>
                           <div className="flex items-center gap-2">
                             <span className="text-lg font-bold text-emerald-700">₹</span>
@@ -2775,7 +2776,7 @@ export default function TreasurerEntry({
                             <div className="mt-2 text-xs text-emerald-800 font-semibold bg-emerald-100 p-2 rounded-lg flex items-center gap-1.5">
                               <AlertTriangle className="h-4 w-4 shrink-0 text-emerald-700" />
                               <span>
-                                Outstanding balance of {formatINR(formData.payableAmount - formData.paidAmount)} will be tracked as pending payable.
+                                Outstanding balance of {formatINR(formData.payableAmount - formData.paidAmount)} will be tracked as payable.
                               </span>
                             </div>
                           )}
@@ -2794,32 +2795,52 @@ export default function TreasurerEntry({
 
                     {/* Step: Payment Mode */}
                     {currentStepConfig.id === "payment_mode" && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div
-                          onClick={() => setFormData({ ...formData, paymentMode: "Cash" })}
-                          className={`p-5 rounded-2xl border-2 transition-all cursor-pointer text-center space-y-2 ${
-                            formData.paymentMode === "Cash"
-                              ? "border-amber-600 bg-amber-50 ring-2 ring-amber-500/20"
-                              : "border-slate-200 hover:border-slate-300 bg-white"
-                          }`}
-                        >
-                          <div className="text-4xl">💵</div>
-                          <h4 className="font-bold text-base text-slate-900">Cash Payment</h4>
-                          <p className="text-xs text-slate-500">Paid out in cash from physical chapter cash drawer.</p>
-                        </div>
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Select Mode of Payment
+                        </label>
 
-                        <div
-                          onClick={() => setFormData({ ...formData, paymentMode: "Bank" })}
-                          className={`p-5 rounded-2xl border-2 transition-all cursor-pointer text-center space-y-2 ${
-                            formData.paymentMode === "Bank"
-                              ? "border-amber-600 bg-amber-50 ring-2 ring-amber-500/20"
-                              : "border-slate-200 hover:border-slate-300 bg-white"
-                          }`}
-                        >
-                          <div className="text-4xl">🏦</div>
-                          <h4 className="font-bold text-base text-slate-900">Bank Transfer / Cheque</h4>
-                          <p className="text-xs text-slate-500">Paid directly from bank account via cheque, NEFT, or UPI.</p>
-                        </div>
+                        {formData.category === "bank_expense" ? (
+                          <div className="p-5 rounded-2xl border-2 border-blue-500 bg-blue-50/60 text-center space-y-2">
+                            <div className="w-12 h-12 bg-blue-100 text-blue-700 rounded-2xl flex items-center justify-center mx-auto mb-1">
+                              <Lock className="h-6 w-6" />
+                            </div>
+                            <h4 className="font-bold text-base text-blue-900">Bank Transfer (Locked)</h4>
+                            <p className="text-xs text-blue-700 font-medium">Bank charges are strictly processed via direct bank debit / transfer.</p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div
+                              onClick={() => setFormData({ ...formData, paymentMode: "Cash" })}
+                              className={`p-5 rounded-2xl border-2 transition-all cursor-pointer text-center space-y-2 ${
+                                formData.paymentMode === "Cash"
+                                  ? "border-amber-600 bg-amber-50 ring-2 ring-amber-500/20"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
+                              }`}
+                            >
+                              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center mx-auto">
+                                <Wallet className="h-5 w-5" />
+                              </div>
+                              <h4 className="font-bold text-base text-slate-900">Cash Payment</h4>
+                              <p className="text-xs text-slate-500">Paid out in cash from physical chapter cash drawer.</p>
+                            </div>
+
+                            <div
+                              onClick={() => setFormData({ ...formData, paymentMode: "Bank" })}
+                              className={`p-5 rounded-2xl border-2 transition-all cursor-pointer text-center space-y-2 ${
+                                formData.paymentMode === "Bank"
+                                  ? "border-amber-600 bg-amber-50 ring-2 ring-amber-500/20"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
+                              }`}
+                            >
+                              <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center mx-auto">
+                                <Landmark className="h-5 w-5" />
+                              </div>
+                              <h4 className="font-bold text-base text-slate-900">Bank Transfer / Cheque</h4>
+                              <p className="text-xs text-slate-500">Paid directly from bank account via cheque, NEFT, or UPI.</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -2827,7 +2848,7 @@ export default function TreasurerEntry({
                     {currentStepConfig.id === "remarks" && (
                       <div className="space-y-3">
                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                          Remarks / Notes (Blank Optional)
+                          Remarks / Notes
                         </label>
                         <textarea
                           rows={3}
@@ -2858,15 +2879,15 @@ export default function TreasurerEntry({
                             className="flex-1 px-3.5 py-3 text-sm font-mono font-semibold bg-transparent focus:outline-none"
                           />
                         </div>
-                        <p className="text-[11px] text-slate-500">
-                          Enter the physical/manual voucher number as recorded in the register.
-                        </p>
                       </div>
                     )}
 
                     {/* Step: Review & Save Expense */}
                     {currentStepConfig.id === "review" && (
                       <div className="space-y-4">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Review and Save
+                        </label>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
                           <div className="flex justify-between py-1.5 border-b border-slate-200">
                             <span className="text-slate-500 font-semibold">Chapter Name:</span>
@@ -2927,13 +2948,6 @@ export default function TreasurerEntry({
                             <span className="font-mono font-bold text-slate-700">PV-{formData.voucherNumber}</span>
                           </div>
                         </div>
-
-                        <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 text-xs text-amber-900 flex items-center gap-2">
-                          <ShieldCheck className="h-4 w-4 shrink-0 text-amber-700" />
-                          <span>
-                            Audit Lock: Once recorded, original transaction entry cannot be directly altered.
-                          </span>
-                        </div>
                       </div>
                     )}
                   </>
@@ -2955,19 +2969,15 @@ export default function TreasurerEntry({
                           onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                           className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
-                        <p className="text-[11px] text-slate-500">
-                          Disbursement date for this loan voucher. Default is today.
-                        </p>
                       </div>
                     )}
 
                     {/* Paid To Chapter */}
                     {currentStepConfig.id === "paid_to" && (
                       <div className="space-y-3">
-                        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-xs text-indigo-900 flex items-center gap-2">
-                          <Building className="h-4 w-4 text-indigo-600 shrink-0" />
-                          <span>Note: Loans are issued strictly to <strong>IHMA Chapters</strong> (not individual members).</span>
-                        </div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Paid To (Chapter)
+                        </label>
                         <div className="relative">
                           <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                           <input
@@ -3110,9 +3120,6 @@ export default function TreasurerEntry({
                           onChange={(e) => setFormData({ ...formData, targetReturnDate: e.target.value })}
                           className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
-                        <p className="text-[11px] text-slate-500">
-                          Agreed repayment deadline date for borrowing chapter.
-                        </p>
                       </div>
                     )}
 
@@ -3120,7 +3127,7 @@ export default function TreasurerEntry({
                     {currentStepConfig.id === "remarks" && (
                       <div className="space-y-3">
                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                          Remarks / Notes (Optional)
+                          Remarks / Notes
                         </label>
                         <textarea
                           rows={3}
@@ -3151,15 +3158,15 @@ export default function TreasurerEntry({
                             className="flex-1 px-3.5 py-3 text-sm font-mono font-semibold bg-transparent focus:outline-none"
                           />
                         </div>
-                        <p className="text-[11px] text-slate-500">
-                          Enter the physical/manual voucher number as recorded in the register.
-                        </p>
                       </div>
                     )}
 
                     {/* Review */}
                     {currentStepConfig.id === "review" && (
                       <div className="space-y-4">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Review and Save
+                        </label>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
                           <div className="flex justify-between py-1.5 border-b border-slate-200">
                             <span className="text-slate-500 font-semibold">Disbursement Date:</span>
@@ -3195,11 +3202,6 @@ export default function TreasurerEntry({
                             <span className="text-slate-500 font-semibold">Voucher #:</span>
                             <span className="font-mono font-bold text-slate-700">LV-{formData.voucherNumber}</span>
                           </div>
-                        </div>
-
-                        <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-200 text-xs text-indigo-900 flex items-center gap-2">
-                          <ShieldCheck className="h-4 w-4 shrink-0 text-indigo-700" />
-                          <span>Audit Lock: Issued loans will be logged into the Chapter Loan Ledger.</span>
                         </div>
                       </div>
                     )}
@@ -3370,9 +3372,16 @@ export default function TreasurerEntry({
                               </label>
                               <input
                                 type="number"
+                                min="1950"
+                                max={new Date().getFullYear()}
                                 placeholder="e.g. 1998"
                                 value={formData.tempYearOfPassing || ""}
-                                onChange={(e) => setFormData({ ...formData, tempYearOfPassing: e.target.value })}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const currentYear = new Date().getFullYear();
+                                  if (val && Number(val) > currentYear) return;
+                                  setFormData({ ...formData, tempYearOfPassing: val });
+                                }}
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white font-mono"
                               />
                             </div>
@@ -3524,7 +3533,7 @@ export default function TreasurerEntry({
                       <div className="space-y-4">
                         <div>
                           <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                            Clinical Specialization / Focus Area
+                            Clinical Specialization
                           </label>
                           <input
                             type="text"
@@ -3576,7 +3585,7 @@ export default function TreasurerEntry({
 
                         <div>
                           <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                            IHMA Association Role / Position
+                            IHMA Role
                           </label>
                           <select
                             value={formData.associationRole || ""}
@@ -3824,9 +3833,6 @@ export default function TreasurerEntry({
                           onChange={(e) => setFormData({ ...formData, assetName: e.target.value })}
                           className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
                         />
-                        <p className="text-[11px] text-slate-500">
-                          Describe the physical asset clearly enough for an auditor to identify it.
-                        </p>
                       </div>
                     )}
 
@@ -3843,9 +3849,6 @@ export default function TreasurerEntry({
                           onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
                           className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
                         />
-                        <p className="text-[11px] text-slate-500">
-                          Original date of purchase as per the invoice. No prefilled default.
-                        </p>
                       </div>
                     )}
 
@@ -3865,9 +3868,6 @@ export default function TreasurerEntry({
                           className="w-full text-2xl font-bold px-4 py-3 border border-slate-300 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
                           placeholder="1"
                         />
-                        <p className="text-[11px] text-slate-500">
-                          How many identical items were purchased, e.g. 3 tables. Enter 1 for a single item.
-                        </p>
                       </div>
                     )}
 
@@ -3917,7 +3917,7 @@ export default function TreasurerEntry({
                     {currentStepConfig.id === "asset_payment_mode" && (
                       <div className="space-y-3">
                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                          Mode of Payment *
+                          Select Mode of Payment
                         </label>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div
@@ -3953,7 +3953,7 @@ export default function TreasurerEntry({
                     {currentStepConfig.id === "asset_remarks" && (
                       <div className="space-y-3">
                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                          Remarks / Notes (Blank Optional)
+                          Remarks / Notes
                         </label>
                         <textarea
                           rows={3}
@@ -3985,9 +3985,6 @@ export default function TreasurerEntry({
                             </option>
                           ))}
                         </select>
-                        <p className="text-[11px] text-slate-500">
-                          Category drives how the asset is grouped in the audit register.
-                        </p>
                       </div>
                     )}
 
@@ -4007,9 +4004,6 @@ export default function TreasurerEntry({
                           className="w-full text-2xl font-bold px-4 py-3 border border-slate-300 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
                           placeholder="0"
                         />
-                        <p className="text-[11px] text-slate-500">
-                          Useful life of this asset in years. Annual depreciation is calculated from this.
-                        </p>
                       </div>
                     )}
 
@@ -4149,13 +4143,6 @@ export default function TreasurerEntry({
                             </div>
                           )}
                         </div>
-
-                        <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 text-xs text-amber-900 flex items-center gap-2">
-                          <ShieldCheck className="h-4 w-4 shrink-0 text-amber-700" />
-                          <span>
-                            Audit Lock: Once recorded, this asset register entry cannot be directly altered.
-                          </span>
-                        </div>
                       </div>
                     )}
                   </>
@@ -4183,14 +4170,9 @@ export default function TreasurerEntry({
                             onClick={() => setFormData({ ...formData, date: new Date().toISOString().slice(0, 10) })}
                             className="px-4 py-3 bg-purple-50 text-purple-800 text-xs font-bold rounded-xl border border-purple-200 hover:bg-purple-100 cursor-pointer"
                           >
-                            Set Today
+                            Today
                           </button>
                         </div>
-                        <p className="text-[11px] text-slate-500">
-                          {formData.amountType === "Bank Interest"
-                            ? "Date the bank credited this interest."
-                            : "Date the fixed deposit was opened with the bank."}
-                        </p>
                       </div>
                     )}
 
@@ -4227,10 +4209,6 @@ export default function TreasurerEntry({
                             <p className="text-xs text-slate-500">Interest credited by the bank, entered as received.</p>
                           </div>
                         </div>
-                        <p className="text-[11px] text-slate-500">
-                          FD records the deposit in the FD register. Bank interest is posted to the
-                          ledger as Bank income and appears in the report summary.
-                        </p>
                       </div>
                     )}
 
@@ -4252,9 +4230,6 @@ export default function TreasurerEntry({
                             placeholder="0"
                           />
                         </div>
-                        <p className="text-[11px] text-slate-500">
-                          Principal deposited. This is a transfer to the FD account — not an expense.
-                        </p>
                       </div>
                     )}
 
@@ -4276,10 +4251,6 @@ export default function TreasurerEntry({
                             placeholder="0"
                           />
                         </div>
-                        <p className="text-[11px] text-slate-500">
-                          Enter the exact interest credited as per the bank statement or passbook.
-                          It is recorded as Bank income against this chapter.
-                        </p>
                       </div>
                     )}
 
@@ -4287,7 +4258,7 @@ export default function TreasurerEntry({
                     {currentStepConfig.id === "fd_remarks" && (
                       <div className="space-y-3">
                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                          Remarks / Comments (Blank Optional)
+                          Remarks / Notes
                         </label>
                         <textarea
                           rows={3}
@@ -4389,7 +4360,6 @@ export default function TreasurerEntry({
                             </select>
                           </div>
                         </div>
-                        <p className="text-[11px] text-slate-500">Only the bank name is required; the remaining details can be completed when available.</p>
                       </div>
                     )}
 
@@ -4425,13 +4395,6 @@ export default function TreasurerEntry({
                                 <span className="text-slate-500 font-semibold">Account Head:</span>
                                 <span className="font-bold text-slate-900">Bank income</span>
                               </div>
-                            </div>
-
-                            <div className="bg-teal-50 p-3 rounded-lg border border-teal-200 text-xs text-teal-900 flex items-center gap-2">
-                              <ShieldCheck className="h-4 w-4 shrink-0 text-teal-700" />
-                              <span>
-                                This interest amount is recorded as Bank income and appears in the Summary and Detailed report sections.
-                              </span>
                             </div>
                           </>
                         ) : (
@@ -4494,14 +4457,6 @@ export default function TreasurerEntry({
                                 </div>
                               )}
                             </div>
-
-                            <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 text-xs text-amber-900 flex items-center gap-2">
-                              <ShieldCheck className="h-4 w-4 shrink-0 text-amber-700" />
-                              <span>
-                                Audit Lock: Once recorded, this fixed deposit entry cannot be directly altered.
-                                Interest is no longer auto-projected — use Bank Interest to record each credit as it arrives.
-                              </span>
-                            </div>
                           </>
                         )}
                       </div>
@@ -4535,7 +4490,7 @@ export default function TreasurerEntry({
                     className="px-5 sm:px-6 py-2.5 bg-[#0F6E5D] text-white font-bold rounded-xl hover:bg-[#0B5548] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all text-xs shadow-md flex items-center gap-1.5 whitespace-nowrap shrink-0"
                   >
                     <CheckCircle2 className="h-4 w-4" />
-                    <span>Confirm & Save Entry</span>
+                    <span>Review and submit</span>
                   </button>
                 )}
               </div>

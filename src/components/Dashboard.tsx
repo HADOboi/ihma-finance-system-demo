@@ -57,7 +57,27 @@ import {
   BarChart3,
   MapPin,
   Sparkles,
+  Wallet,
+  Banknote,
 } from "lucide-react";
+
+function calculateMemberExpiryDate(membershipDate?: string, membershipType?: string): string {
+  if (!membershipDate) return "—";
+  const typeLower = (membershipType || "").toLowerCase();
+  if (typeLower.includes("platinum") || typeLower.includes("life")) return "Lifelong";
+  
+  const dateObj = new Date(membershipDate);
+  if (isNaN(dateObj.getTime())) return "—";
+
+  if (typeLower.includes("gold")) {
+    dateObj.setFullYear(dateObj.getFullYear() + 12);
+    return formatDateDMY(dateObj.toISOString().slice(0, 10));
+  }
+  
+  // Default / Silver (+1 year)
+  dateObj.setFullYear(dateObj.getFullYear() + 1);
+  return formatDateDMY(dateObj.toISOString().slice(0, 10));
+}
 
 interface DashboardProps {
   currentUser: User;
@@ -294,14 +314,17 @@ export default function Dashboard({
 
   // Human-readable description of what this user is allowed to see.
   const scopeLabel = useMemo(() => {
-    if (currentUser.level === OrgLevel.National) return "All India — National View";
+    if (currentUser.level === OrgLevel.National) return "All India Chapter";
     if (currentUser.level === OrgLevel.State) {
-      return `${STATES.find((s) => s.id === currentUser.nodeId)?.name || "State"} — State View`;
+      const stateName = STATES.find((s) => s.id === currentUser.nodeId)?.name || "State";
+      return stateName.toLowerCase().includes("chapter") ? stateName : `${stateName} Chapter`;
     }
     if (currentUser.level === OrgLevel.District) {
-      return `${DISTRICTS.find((d) => d.id === currentUser.nodeId)?.name || "District"} — District View`;
+      const distName = DISTRICTS.find((d) => d.id === currentUser.nodeId)?.name || "District";
+      return distName.toLowerCase().includes("chapter") ? distName : `${distName} Chapter`;
     }
-    return CHAPTERS.find((c) => c.id === currentUser.nodeId)?.name || "Local Chapter";
+    const chapName = CHAPTERS.find((c) => c.id === currentUser.nodeId)?.name || "Local Chapter";
+    return chapName.toLowerCase().includes("chapter") ? chapName : `${chapName} Chapter`;
   }, [currentUser]);
 
   const userFinancialUnitId = useMemo(() => getUserFinancialUnitId(currentUser), [currentUser]);
@@ -906,9 +929,9 @@ export default function Dashboard({
         csvContent += `${idx + 1},"${tx.chapterIdInput || tx.chapterId}","${tx.chapterNameInput || tx.chapterId}","${tx.date}","${tx.paidTo || ""}","${tx.paidToId || ""}","${tx.paidToName || ""}","${(tx.particulars || tx.description || "").replace(/"/g, '""')}",${tx.amount},${tx.amountReturned || 0},${bal},"${tx.loanReturnDate || ""}","${tx.loanReturnedDate || ""}","${(tx.remarks || "").replace(/"/g, '""')}"\n`;
       });
     } else if (activeReportTab === "members") {
-      csvContent += "Sl. No.,Member ID Number,Member Name,Chapter ID No.,Chapter Name,Member Qualification,Membership Type,Membership Date,Membership Status,Mobile Number,WhatsApp Number,Email Address,Office/Clinic Number\n";
+      csvContent += "Sl. No.,Member ID Number,Member Name,Chapter ID No.,Chapter Name,Member Qualification,Membership Type,Membership Date,Expiry Date,Membership Status,Mobile Number,WhatsApp Number,Email Address,Office/Clinic Number\n";
       filteredMembers.forEach((m, idx) => {
-        csvContent += `${idx + 1},"${m.memberId}","${m.memberName}","${m.chapterIdInput}","${m.chapterNameInput}","${m.qualification}","${m.membershipType}","${m.membershipDate}","${m.membershipStatus}","${m.mobileNumber}","${m.whatsappNumber}","${m.email}","${m.clinicNumber}"\n`;
+        csvContent += `${idx + 1},"${m.memberId}","${m.memberName}","${m.chapterIdInput}","${m.chapterNameInput}","${m.qualification}","${m.membershipType}","${m.membershipDate}","${calculateMemberExpiryDate(m.membershipDate, m.membershipType)}","${m.membershipStatus}","${m.mobileNumber}","${m.whatsappNumber}","${m.email}","${m.clinicNumber}"\n`;
       });
     } else if (activeReportTab === "entity_types") {
       csvContent += "Sl. No.,Entity Type,Purpose / Scope\n";
@@ -980,7 +1003,7 @@ export default function Dashboard({
     <div className="space-y-6 font-sans">
       {/* 1. SELECTION FILTERS PANEL (Based on User's Org Level) */}
       <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs" id="dashboard-filters-container">
-        <div className="flex flex-col gap-3 mb-4 border-b border-slate-100 pb-4">
+        <div className={`flex flex-col gap-3 ${currentUser.level !== OrgLevel.Local ? "mb-4 border-b border-slate-100 pb-4" : ""}`}>
           <div className="flex flex-wrap items-center gap-2">
             {onBackToHome && (
               <button
@@ -1019,10 +1042,11 @@ export default function Dashboard({
         </div>
 
 
-        <div className="space-y-5">
-          {/* A. Geographical / Organizational selections (Cascading) */}
-          <div className="grid grid-cols-1 gap-4">
-            {currentUser.level !== OrgLevel.Local && (
+        {currentUser.level !== OrgLevel.Local && (
+          <div className="space-y-5">
+            {/* A. Geographical / Organizational selections (Cascading) */}
+            <div className="grid grid-cols-1 gap-4">
+              {currentUser.level !== OrgLevel.Local && (
               <div
                 ref={geoFilterRef}
                 id="geo-filter-row"
@@ -1208,6 +1232,7 @@ export default function Dashboard({
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* GUIDED REPORT ENTRY POINT */}
@@ -1385,7 +1410,9 @@ export default function Dashboard({
                 {formatINR(summaryMetrics.netCashBalance)}
               </span>
             </div>
-            <span className="text-xl">💵</span>
+            <span className="p-2 bg-amber-50 text-amber-700 rounded-lg">
+              <Wallet className="h-5 w-5" />
+            </span>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs flex justify-between items-center">
@@ -1395,7 +1422,9 @@ export default function Dashboard({
                 {formatINR(summaryMetrics.netBankBalance)}
               </span>
             </div>
-            <span className="text-xl">🏦</span>
+            <span className="p-2 bg-blue-50 text-blue-700 rounded-lg">
+              <Landmark className="h-5 w-5" />
+            </span>
           </div>
 
           <div className="bg-slate-900 text-white border border-slate-800 rounded-xl p-3.5 shadow-xs flex justify-between items-center">
@@ -1405,7 +1434,9 @@ export default function Dashboard({
                 {summaryMetrics.netTotalBalance >= 0 ? "+" : ""}{formatINR(summaryMetrics.netTotalBalance)}
               </span>
             </div>
-            <span className="text-xl">⚖️</span>
+            <span className="p-2 bg-slate-800 text-emerald-400 rounded-lg">
+              <Scale className="h-5 w-5" />
+            </span>
           </div>
         </div>
       </div>
@@ -1450,25 +1481,19 @@ export default function Dashboard({
           <div className="bg-slate-50 px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 rounded-t-2xl relative z-20">
             <div className="flex items-center gap-2.5 w-full lg:max-w-md">
               <span className="text-slate-500 text-[11px] sm:text-xs font-bold uppercase tracking-wider shrink-0 hidden sm:inline">
-                Report View:
+                Account heads:
               </span>
 
               {/* CUSTOM STYLED DROPDOWN */}
               {(() => {
                 const reportTabOptions = [
-                  { id: "payments" as ReportTab, label: "Payments (Expense)", group: "Financial Registers", icon: ArrowUpRight, count: `${filteredPayments.length} entries` },
-                  { id: "receipts" as ReportTab, label: "Receipts (Income)", group: "Financial Registers", icon: ArrowDownRight, count: `${filteredReceipts.length} entries` },
-                  { id: "loans" as ReportTab, label: "Temporary Loan Registry", group: "Financial Registers", icon: Briefcase, count: `${filteredLoans.length} loans` },
-                  { id: "raw" as ReportTab, label: "Consolidated Raw Ledger", group: "Financial Registers", icon: BookOpen, count: `${detailedTransactions.length} entries` },
-                  
-                  { id: "members" as ReportTab, label: "Member Doctor Directory", group: "Directories & Masters", icon: Users, count: `${filteredMembers.length} doctors` },
-                  { id: "chapters" as ReportTab, label: "Chapter Master Directory", group: "Directories & Masters", icon: MapPin, count: `${filteredChapters.length} chapters` },
-                  { id: "assets" as ReportTab, label: "Asset Register", group: "Directories & Masters", icon: Building2, count: `${filteredAssets.length} assets` },
-                  { id: "bank_balances" as ReportTab, label: "FD & Bank", group: "Directories & Masters", icon: Landmark, count: `${filteredBankBalances.length} FDs` },
-                  { id: "entity_types" as ReportTab, label: "Entity Types Taxonomy", group: "Directories & Masters", icon: Layers, count: "5 Tiers" },
-                  
-                  { id: "monthly" as ReportTab, label: "Monthly Summary Aggregation", group: "Analytical Reports", icon: BarChart3, count: "12 Months" },
-                  { id: "yearly" as ReportTab, label: "Annual Matrix Sheet (Apr - Mar)", group: "Analytical Reports", icon: Calendar, count: "FY Matrix" },
+                  { id: "payments" as ReportTab, label: "Payments (Expense)", icon: ArrowUpRight, count: `${filteredPayments.length} entries` },
+                  { id: "receipts" as ReportTab, label: "Receipts (Income)", icon: ArrowDownRight, count: `${filteredReceipts.length} entries` },
+                  { id: "loans" as ReportTab, label: "Internal Loans Details", icon: Briefcase, count: `${filteredLoans.length} loans` },
+                  { id: "members" as ReportTab, label: "Member Details", icon: Users, count: `${filteredMembers.length} doctors` },
+                  { id: "chapters" as ReportTab, label: "Chapter Details", icon: MapPin, count: `${filteredChapters.length} chapters` },
+                  { id: "assets" as ReportTab, label: "Asset Details", icon: Building2, count: `${filteredAssets.length} assets` },
+                  { id: "bank_balances" as ReportTab, label: "Fixed Deposit Details", icon: Landmark, count: `${filteredBankBalances.length} FDs` },
                 ];
 
                 const currentOpt = reportTabOptions.find((o) => o.id === activeReportTab) || reportTabOptions[0];
@@ -1500,50 +1525,38 @@ export default function Dashboard({
                           className="fixed inset-0 z-40"
                           onClick={() => setIsReportDropdownOpen(false)}
                         />
-                        <div className="absolute top-full left-0 mt-2 w-full sm:w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden max-h-96 overflow-y-auto divide-y divide-slate-100">
-                          {["Financial Registers", "Directories & Masters", "Analytical Reports"].map((groupName) => {
-                            const groupOptions = reportTabOptions.filter((o) => o.group === groupName);
-                            if (groupOptions.length === 0) return null;
+                        <div className="absolute top-full left-0 mt-2 w-full sm:w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden max-h-96 overflow-y-auto p-1.5 space-y-0.5">
+                          {reportTabOptions.map((opt) => {
+                            const OptIcon = opt.icon;
+                            const isSelected = activeReportTab === opt.id;
 
                             return (
-                              <div key={groupName} className="p-1.5">
-                                <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                                  {groupName}
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={() => {
+                                  setActiveReportTab(opt.id);
+                                  setIsReportDropdownOpen(false);
+                                }}
+                                className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                                  isSelected
+                                    ? "bg-blue-50 text-blue-900 font-bold"
+                                    : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 truncate">
+                                  <OptIcon className={`h-4 w-4 shrink-0 ${isSelected ? "text-blue-600" : "text-slate-400"}`} />
+                                  <span className="truncate">{opt.label}</span>
                                 </div>
-                                {groupOptions.map((opt) => {
-                                  const OptIcon = opt.icon;
-                                  const isSelected = activeReportTab === opt.id;
-
-                                  return (
-                                    <button
-                                      key={opt.id}
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveReportTab(opt.id);
-                                        setIsReportDropdownOpen(false);
-                                      }}
-                                      className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                                        isSelected
-                                          ? "bg-blue-50 text-blue-900 font-bold"
-                                          : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
-                                      }`}
-                                    >
-                                      <div className="flex items-center gap-2 truncate">
-                                        <OptIcon className={`h-4 w-4 shrink-0 ${isSelected ? "text-blue-600" : "text-slate-400"}`} />
-                                        <span className="truncate">{opt.label}</span>
-                                      </div>
-                                      <div className="flex items-center gap-1.5 shrink-0">
-                                        <span className={`px-2 py-0.5 text-[10px] rounded-md font-bold ${
-                                          isSelected ? "bg-blue-100 text-blue-800" : "bg-slate-100 text-slate-500"
-                                        }`}>
-                                          {opt.count}
-                                        </span>
-                                        {isSelected && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
-                                      </div>
-                                    </button>
-                                  );
-                                })}
-                              </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span className={`px-2 py-0.5 text-[10px] rounded-md font-bold ${
+                                    isSelected ? "bg-blue-100 text-blue-800" : "bg-slate-100 text-slate-500"
+                                  }`}>
+                                    {opt.count}
+                                  </span>
+                                  {isSelected && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
+                                </div>
+                              </button>
                             );
                           })}
                         </div>
@@ -1930,6 +1943,7 @@ export default function Dashboard({
                       <th className="py-2.5 px-3">Qualification</th>
                       <th className="py-2.5 px-3">Membership Type</th>
                       <th className="py-2.5 px-3">Membership Date</th>
+                      <th className="py-2.5 px-3">Expiry Date</th>
                       <th className="py-2.5 px-3">Status</th>
                       <th className="py-2.5 px-3">Mobile No.</th>
                       <th className="py-2.5 px-3">WhatsApp No.</th>
@@ -1940,7 +1954,7 @@ export default function Dashboard({
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     {filteredMembers.length === 0 ? (
                       <tr>
-                        <td colSpan={13} className="py-8 text-center text-slate-400">
+                        <td colSpan={14} className="py-8 text-center text-slate-400">
                           No member records match the search parameters.
                         </td>
                       </tr>
@@ -1955,6 +1969,7 @@ export default function Dashboard({
                           <td className="py-3 px-3 text-slate-600 font-medium">{m.qualification}</td>
                           <td className="py-3 px-3 font-semibold text-blue-700">{m.membershipType}</td>
                           <td className="py-3 px-3 font-mono text-slate-600 whitespace-nowrap">{m.membershipDate ? formatDateDMY(m.membershipDate) : "—"}</td>
+                          <td className="py-3 px-3 font-mono text-emerald-700 font-bold whitespace-nowrap">{calculateMemberExpiryDate(m.membershipDate, m.membershipType)}</td>
                           <td className="py-3 px-3">
                             <span className="bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded-full text-[10px] uppercase border border-emerald-200">
                               {m.membershipStatus}
