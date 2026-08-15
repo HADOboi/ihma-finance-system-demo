@@ -385,29 +385,71 @@ export default function Dashboard({
   const readableFinancialUnitIds = useMemo(() => getReadableFinancialUnitIds(currentUser), [currentUser]);
 
   // --- Dynamic Filtering Lists for UI ---
+  // Combine static mock CHAPTERS and Supabase DB chapterDirectory to ensure all chapters/districts work
+  const combinedChapters = useMemo(() => {
+    const list = [...CHAPTERS];
+    const existingIds = new Set(list.map((c) => c.id));
+
+    (chapterDirectory || []).forEach((c) => {
+      if (!c.id) return;
+      const districtId = c.district ? c.district.toLowerCase().replace(/\s+/g, "_") : "";
+      if (!existingIds.has(c.id)) {
+        list.push({
+          id: c.id,
+          name: c.chapterName,
+          districtId: districtId,
+        });
+        existingIds.add(c.id);
+      }
+    });
+    return list;
+  }, [chapterDirectory]);
+
+  const combinedDistricts = useMemo(() => {
+    const list = [...DISTRICTS];
+    const existingIds = new Set(list.map((d) => d.id));
+
+    (chapterDirectory || []).forEach((c) => {
+      if (!c.district) return;
+      const distId = c.district.toLowerCase().replace(/\s+/g, "_");
+      const stateId = c.state ? c.state.toLowerCase().replace(/\s+/g, "_") : "kerala";
+      if (!existingIds.has(distId)) {
+        list.push({
+          id: distId,
+          name: c.district,
+          stateId: stateId,
+        });
+        existingIds.add(distId);
+      }
+    });
+    return list;
+  }, [chapterDirectory]);
+
   // Districts available under chosen States
   const availableDistricts = useMemo(() => {
     if (currentUser.level === OrgLevel.National) {
       const stateScope = selectedStates.length > 0 ? selectedStates : STATES.map((s) => s.id);
-      return DISTRICTS.filter((d) => stateScope.includes(d.stateId));
+      return combinedDistricts.filter((d) => stateScope.includes(d.stateId));
     }
     if (currentUser.level === OrgLevel.State) {
-      return DISTRICTS.filter((d) => d.stateId === currentUser.nodeId);
+      const userState = currentUser.nodeId?.toLowerCase() || "";
+      return combinedDistricts.filter((d) => d.stateId === currentUser.nodeId || d.stateId === userState);
     }
     return [];
-  }, [selectedStates, currentUser]);
+  }, [selectedStates, currentUser, combinedDistricts]);
 
   // Chapters available under chosen Districts
   const availableChapters = useMemo(() => {
     if (currentUser.level === OrgLevel.National || currentUser.level === OrgLevel.State) {
       const districtScope = selectedDistricts.length > 0 ? selectedDistricts : availableDistricts.map((d) => d.id);
-      return CHAPTERS.filter((c) => districtScope.includes(c.districtId));
+      return combinedChapters.filter((c) => districtScope.includes(c.districtId));
     }
     if (currentUser.level === OrgLevel.District) {
-      return CHAPTERS.filter((c) => c.districtId === currentUser.nodeId);
+      const userDist = currentUser.nodeId?.toLowerCase() || "";
+      return combinedChapters.filter((c) => c.districtId === currentUser.nodeId || c.districtId === userDist || c.districtId === userDist.replace(/\s+/g, "_"));
     }
     return [];
-  }, [selectedDistricts, currentUser, availableDistricts]);
+  }, [selectedDistricts, currentUser, availableDistricts, combinedChapters]);
 
   const selectedFinancialUnitIds = useMemo(() => {
     if (currentUser.level === OrgLevel.Local) return [userFinancialUnitId];
@@ -434,13 +476,13 @@ export default function Dashboard({
       : [...selectedStates, stateId];
     setSelectedStates(updated);
 
-    const stillValidDists = DISTRICTS.filter(
+    const stillValidDists = combinedDistricts.filter(
       (d) => updated.includes(d.stateId) && selectedDistricts.includes(d.id)
     ).map((d) => d.id);
     setSelectedDistricts(stillValidDists);
     setSelectedChapters((prev) =>
       prev.filter((chapId) => {
-        const chap = CHAPTERS.find((c) => c.id === chapId);
+        const chap = combinedChapters.find((c) => c.id === chapId);
         return chap ? stillValidDists.includes(chap.districtId) : false;
       })
     );
@@ -454,7 +496,7 @@ export default function Dashboard({
 
     setSelectedChapters((prev) =>
       prev.filter((chapId) => {
-        const chap = CHAPTERS.find((c) => c.id === chapId);
+        const chap = combinedChapters.find((c) => c.id === chapId);
         return chap ? updated.includes(chap.districtId) : false;
       })
     );
@@ -1146,7 +1188,7 @@ export default function Dashboard({
                     options={availableChapters.map((c) => ({
                       id: c.id,
                       name: c.name,
-                      hint: DISTRICTS.find((d) => d.id === c.districtId)?.name || "",
+                      hint: combinedDistricts.find((d) => d.id === c.districtId)?.name || DISTRICTS.find((d) => d.id === c.districtId)?.name || "",
                     }))}
                     selectedIds={selectedChapters}
                     isOpen={openGeoFilter === "chapters"}
