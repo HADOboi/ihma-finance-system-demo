@@ -59,6 +59,7 @@ import {
   Sparkles,
   Wallet,
   Banknote,
+  Loader2,
 } from "lucide-react";
 
 function calculateMemberExpiryDate(membershipDate?: string, membershipType?: string): string {
@@ -87,6 +88,7 @@ interface DashboardProps {
   bankBalances?: BankBalance[];
   chapterDirectory?: ChapterMaster[];
   members?: Member[];
+  loading?: boolean;
   onDeleteTransaction: (id: string) => void;
   onEditTransaction: (tx: Transaction) => void;
   onUpdateTransaction?: (tx: Transaction) => void;
@@ -228,6 +230,7 @@ export default function Dashboard({
   bankBalances = PRELOADED_BANK_BALANCES,
   chapterDirectory = PRELOADED_CHAPTER_DIRECTORY,
   members = PRELOADED_MEMBERS,
+  loading = false,
   onDeleteTransaction,
   onEditTransaction,
   onUpdateTransaction,
@@ -1035,119 +1038,137 @@ export default function Dashboard({
 
   return (
     <div className="space-y-6 font-sans">
-      {/* 1. SELECTION FILTERS PANEL (Based on User's Org Level) */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs" id="dashboard-filters-container">
-        <div className={`flex flex-col gap-3 ${currentUser.level !== OrgLevel.Local ? "mb-4 border-b border-slate-100 pb-4" : ""}`}>
-          <div className="flex flex-wrap items-center gap-2">
-            {onBackToHome && (
-              <button
-                type="button"
-                onClick={onBackToHome}
-                id="back-to-home-button"
-                className="inline-flex items-center gap-2 h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 shrink-0 cursor-pointer"
-                aria-label="Back to home"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Home
-              </button>
-            )}
-
-            <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-200 text-[11px] font-bold">
-                {scopeLabel}
-              </span>
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200 text-[11px] font-bold">
-                {currentUser.level}
-              </span>
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-bold">
-                {currentUser.role === "Treasurer" ? "Treasurer (R/W)" : `${currentUser.role} (RO)`}
-              </span>
+      {/* Loading Indicator Banner */}
+      {loading && (
+        <div className="bg-blue-50/80 border border-blue-200 text-blue-800 px-4 py-3 rounded-2xl flex items-center justify-between shadow-xs animate-pulse" id="reports-loading-banner">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-5 w-5 animate-spin text-blue-600 shrink-0" />
+            <div>
+              <p className="text-xs font-bold text-blue-900">Synchronizing with Supabase...</p>
+              <p className="text-[11px] text-blue-700">Fetching latest transactions, chapters, and ledger data.</p>
             </div>
           </div>
+          <span className="text-[10px] font-mono font-semibold bg-blue-100/80 text-blue-800 px-2 py-0.5 rounded-md">
+            Loading data...
+          </span>
         </div>
+      )}
 
-
-        {currentUser.level !== OrgLevel.Local && (
-          <div className="space-y-5">
-            {/* A. Geographical / Organizational selections (Cascading) */}
-            <div className="grid grid-cols-1 gap-4">
-              <div
-                ref={geoFilterRef}
-                id="geo-filter-row"
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 border-b border-slate-100 pb-4"
-              >
+      {/* 1. SELECTION FILTERS PANEL (Based on User's Org Level) - Only on Reports Landing */}
+      {!reportSection && (
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs" id="dashboard-filters-container">
+          <div className={`flex flex-col gap-3 ${currentUser.level !== OrgLevel.Local ? "mb-4 border-b border-slate-100 pb-4" : ""}`}>
+            <div className="flex flex-wrap items-center gap-2">
+              {onBackToHome && (
                 <button
                   type="button"
-                  onClick={() => setIncludeOwnFinancialUnit((selected) => !selected)}
-                  className={`sm:col-span-2 lg:col-span-3 flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border text-left text-xs font-bold cursor-pointer ${includeOwnFinancialUnit ? "bg-teal-50 border-teal-300 text-teal-900" : "bg-white border-slate-300 text-slate-700 hover:border-teal-300"}`}
+                  onClick={onBackToHome}
+                  id="back-to-home-button"
+                  className="inline-flex items-center gap-2 h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 shrink-0 cursor-pointer"
+                  aria-label="Back to home"
                 >
-                  <span>Include {getFinancialUnitName(userFinancialUnitId)}</span>
-                  <span className={`h-5 w-5 rounded-md border flex items-center justify-center ${includeOwnFinancialUnit ? "bg-[#0F6E5D] border-[#0F6E5D] text-white" : "border-slate-300"}`}>{includeOwnFinancialUnit && <Check className="h-3.5 w-3.5" />}</span>
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to Home
                 </button>
-                {/* National Level View: Select States */}
-                {currentUser.level === OrgLevel.National && (
-                  <MultiSelectFilter
-                    label="States"
-                    wrapperId="state-selector-wrapper"
-                    idPrefix="state-filter"
-                    options={STATES.map((s) => ({ id: s.id, name: s.name }))}
-                    selectedIds={selectedStates}
-                    isOpen={openGeoFilter === "states"}
-                    onToggleOpen={() => toggleGeoFilter("states")}
-                    onToggleOption={handleStateToggle}
-                    onSelectAll={selectAllStates}
-                    onClear={selectNoneStates}
-                    emptyHint="No states available"
-                  />
-                )}
+              )}
 
-                {/* National & State View: Select Districts */}
-                {(currentUser.level === OrgLevel.National || currentUser.level === OrgLevel.State) && (
-                  <MultiSelectFilter
-                    label="Districts"
-                    wrapperId="district-selector-wrapper"
-                    idPrefix="district-filter"
-                    options={availableDistricts.map((d) => ({ id: d.id, name: d.name }))}
-                    selectedIds={selectedDistricts}
-                    isOpen={openGeoFilter === "districts"}
-                    onToggleOpen={() => toggleGeoFilter("districts")}
-                    onToggleOption={handleDistrictToggle}
-                    onSelectAll={selectAllDistricts}
-                    onClear={selectNoneDistricts}
-                    emptyHint="Select a state first"
-                  />
-                )}
-
-                {/* Select Chapters (Visible on National, State, and District levels) */}
-                <MultiSelectFilter
-                  label="Local Chapters"
-                  wrapperId="chapter-selector-wrapper"
-                  idPrefix="chapter-filter"
-                  options={availableChapters.map((c) => ({
-                    id: c.id,
-                    name: c.name,
-                    hint: DISTRICTS.find((d) => d.id === c.districtId)?.name || "",
-                  }))}
-                  selectedIds={selectedChapters}
-                  isOpen={openGeoFilter === "chapters"}
-                  onToggleOpen={() => toggleGeoFilter("chapters")}
-                  onToggleOption={handleChapterToggle}
-                  onSelectAll={selectAllChapters}
-                  onClear={selectNoneChapters}
-                  emptyHint="Select a district first"
-                />
+              <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-200 text-[11px] font-bold">
+                  {scopeLabel}
+                </span>
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200 text-[11px] font-bold">
+                  {currentUser.level}
+                </span>
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-bold">
+                  {currentUser.role === "Treasurer" ? "Treasurer (R/W)" : `${currentUser.role} (RO)`}
+                </span>
               </div>
-
-            {!hasAnyGeoSelection && (
-              <div id="no-geo-selection-notice" className="flex items-center gap-2.5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-semibold text-amber-800">
-                <Info className="h-4 w-4 shrink-0" />
-                Select at least one state, district or chapter above to view data. Nothing is shown until you make a selection.
-              </div>
-            )}
             </div>
           </div>
-        )}
-      </div>
+
+
+          {currentUser.level !== OrgLevel.Local && (
+            <div className="space-y-5">
+              {/* A. Geographical / Organizational selections (Cascading) */}
+              <div className="grid grid-cols-1 gap-4">
+                <div
+                  ref={geoFilterRef}
+                  id="geo-filter-row"
+                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 border-b border-slate-100 pb-4"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setIncludeOwnFinancialUnit((selected) => !selected)}
+                    className={`sm:col-span-2 lg:col-span-3 flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border text-left text-xs font-bold cursor-pointer ${includeOwnFinancialUnit ? "bg-teal-50 border-teal-300 text-teal-900" : "bg-white border-slate-300 text-slate-700 hover:border-teal-300"}`}
+                  >
+                    <span>Include {getFinancialUnitName(userFinancialUnitId)}</span>
+                    <span className={`h-5 w-5 rounded-md border flex items-center justify-center ${includeOwnFinancialUnit ? "bg-[#0F6E5D] border-[#0F6E5D] text-white" : "border-slate-300"}`}>{includeOwnFinancialUnit && <Check className="h-3.5 w-3.5" />}</span>
+                  </button>
+                  {/* National Level View: Select States */}
+                  {currentUser.level === OrgLevel.National && (
+                    <MultiSelectFilter
+                      label="States"
+                      wrapperId="state-selector-wrapper"
+                      idPrefix="state-filter"
+                      options={STATES.map((s) => ({ id: s.id, name: s.name }))}
+                      selectedIds={selectedStates}
+                      isOpen={openGeoFilter === "states"}
+                      onToggleOpen={() => toggleGeoFilter("states")}
+                      onToggleOption={handleStateToggle}
+                      onSelectAll={selectAllStates}
+                      onClear={selectNoneStates}
+                      emptyHint="No states available"
+                    />
+                  )}
+
+                  {/* National & State View: Select Districts */}
+                  {(currentUser.level === OrgLevel.National || currentUser.level === OrgLevel.State) && (
+                    <MultiSelectFilter
+                      label="Districts"
+                      wrapperId="district-selector-wrapper"
+                      idPrefix="district-filter"
+                      options={availableDistricts.map((d) => ({ id: d.id, name: d.name }))}
+                      selectedIds={selectedDistricts}
+                      isOpen={openGeoFilter === "districts"}
+                      onToggleOpen={() => toggleGeoFilter("districts")}
+                      onToggleOption={handleDistrictToggle}
+                      onSelectAll={selectAllDistricts}
+                      onClear={selectNoneDistricts}
+                      emptyHint="Select a state first"
+                    />
+                  )}
+
+                  {/* Select Chapters (Visible on National, State, and District levels) */}
+                  <MultiSelectFilter
+                    label="Local Chapters"
+                    wrapperId="chapter-selector-wrapper"
+                    idPrefix="chapter-filter"
+                    options={availableChapters.map((c) => ({
+                      id: c.id,
+                      name: c.name,
+                      hint: DISTRICTS.find((d) => d.id === c.districtId)?.name || "",
+                    }))}
+                    selectedIds={selectedChapters}
+                    isOpen={openGeoFilter === "chapters"}
+                    onToggleOpen={() => toggleGeoFilter("chapters")}
+                    onToggleOption={handleChapterToggle}
+                    onSelectAll={selectAllChapters}
+                    onClear={selectNoneChapters}
+                    emptyHint="Select a district first"
+                  />
+                </div>
+
+              {!hasAnyGeoSelection && (
+                <div id="no-geo-selection-notice" className="flex items-center gap-2.5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-semibold text-amber-800">
+                  <Info className="h-4 w-4 shrink-0" />
+                  Select at least one state, district or chapter above to view data. Nothing is shown until you make a selection.
+                </div>
+              )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* LANDING VIEW: 3 CARDS */}
       {!reportSection && (
@@ -1156,9 +1177,6 @@ export default function Dashboard({
             <h2 className="text-xl sm:text-2xl font-bold font-display text-slate-900">
               Financial Reports & Statements
             </h2>
-            <p className="text-xs text-slate-500 mt-1 max-w-lg mx-auto">
-              Select a report type below to view financial summaries, detailed category ledgers, or generate custom reports.
-            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1234,22 +1252,26 @@ export default function Dashboard({
       {/* SECTION 1: SUMMARY */}
       {reportSection === "summary" && (
       <div className="space-y-4">
-        <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-          <button
-            type="button"
-            onClick={() => handleSelectSection(null)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold text-xs shadow-2xs cursor-pointer"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Back to Reports</span>
-          </button>
-          <h2 className="text-base font-bold text-emerald-950">Summary</h2>
-          <span className="text-xs font-semibold text-slate-500">
-            {periodType === "year" && `Financial Year ${selectedYear}-${(selectedYear + 1).toString().slice(2)}`}
-            {periodType === "month" && `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][selectedMonth]} ${selectedYear}`}
-            {periodType === "day" && formatDateDMY(selectedDay)}
-            {periodType === "custom" && `${formatDateDMY(startDate)} to ${formatDateDMY(endDate)}`}
-          </span>
+        <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 border-b border-slate-200 pb-3">
+          <div className="flex justify-start">
+            <button
+              type="button"
+              onClick={() => handleSelectSection(null)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold text-xs shadow-2xs cursor-pointer"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back to Reports</span>
+            </button>
+          </div>
+          <h2 className="text-base font-bold text-emerald-950 text-center">Summary</h2>
+          <div className="flex sm:justify-end">
+            <span className="text-xs font-semibold text-slate-500">
+              {periodType === "year" && `Financial Year ${selectedYear}-${(selectedYear + 1).toString().slice(2)}`}
+              {periodType === "month" && `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][selectedMonth]} ${selectedYear}`}
+              {periodType === "day" && formatDateDMY(selectedDay)}
+              {periodType === "custom" && `${formatDateDMY(startDate)} to ${formatDateDMY(endDate)}`}
+            </span>
+          </div>
         </div>
 
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center gap-3">
@@ -1412,16 +1434,26 @@ export default function Dashboard({
       {/* SECTION 2: DETAILED REPORTS */}
       {reportSection === "detailed" && (
       <div className="space-y-4">
-        <div className="flex justify-between items-center gap-3 border-b border-slate-200 pb-3">
-          <button
-            type="button"
-            onClick={() => handleSelectSection(null)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold text-xs shadow-2xs cursor-pointer"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Back to Reports</span>
-          </button>
-          <h2 className="text-base font-bold text-emerald-950">Detailed Report</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 border-b border-slate-200 pb-3">
+          <div className="flex justify-start">
+            <button
+              type="button"
+              onClick={() => handleSelectSection(null)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold text-xs shadow-2xs cursor-pointer"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back to Reports</span>
+            </button>
+          </div>
+          <h2 className="text-base font-bold text-emerald-950 text-center">Detailed Report</h2>
+          <div className="flex sm:justify-end">
+            <span className="text-xs font-semibold text-slate-500">
+              {detailPeriodType === "year" && `Financial Year ${detailYear}-${(detailYear + 1).toString().slice(2)}`}
+              {detailPeriodType === "month" && `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][detailMonth]} ${detailYear}`}
+              {detailPeriodType === "day" && formatDateDMY(detailDay)}
+              {detailPeriodType === "custom" && `${formatDateDMY(detailStartDate)} to ${formatDateDMY(detailEndDate)}`}
+            </span>
+          </div>
         </div>
 
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center gap-3">
@@ -1577,6 +1609,7 @@ export default function Dashboard({
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-wider">
                       <th className="py-2.5 px-3">Sl. No.</th>
+                      <th className="py-2.5 px-3">Voucher No.</th>
                       <th className="py-2.5 px-3">Chapter ID</th>
                       <th className="py-2.5 px-3">Chapter Name</th>
                       <th className="py-2.5 px-3">Date</th>
@@ -1596,7 +1629,7 @@ export default function Dashboard({
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     {filteredPayments.length === 0 ? (
                       <tr>
-                        <td colSpan={13} className="py-8 text-center text-slate-400">
+                        <td colSpan={14} className="py-8 text-center text-slate-400">
                           No payment entries match the selected filters.
                         </td>
                       </tr>
@@ -1608,6 +1641,7 @@ export default function Dashboard({
                         return (
                           <tr key={tx.id} className="hover:bg-slate-50/40 transition-colors">
                             <td className="py-3 px-3 font-mono font-bold text-slate-500">{idx + 1}</td>
+                            <td className="py-3 px-3 font-mono text-slate-700 font-semibold">{tx.voucherNumber || "—"}</td>
                             <td className="py-3 px-3 font-mono text-slate-600">{tx.chapterIdInput || tx.chapterId}</td>
                             <td className="py-3 px-3 font-semibold text-slate-800">{chapterName}</td>
                             <td className="py-3 px-3 font-mono text-slate-600 whitespace-nowrap">{tx.date ? formatDateDMY(tx.date) : "—"}</td>
@@ -1680,6 +1714,7 @@ export default function Dashboard({
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-wider">
                       <th className="py-2.5 px-3">Sl. No.</th>
+                      <th className="py-2.5 px-3">Voucher No.</th>
                       <th className="py-2.5 px-3">Chapter ID</th>
                       <th className="py-2.5 px-3">Chapter Name</th>
                       <th className="py-2.5 px-3">Date</th>
@@ -1690,7 +1725,6 @@ export default function Dashboard({
                       <th className="py-2.5 px-3 text-right">Paid Amount (₹)</th>
                       <th className="py-2.5 px-3 text-right">Balance (₹)</th>
                       <th className="py-2.5 px-3">Payment Mode</th>
-                      <th className="py-2.5 px-3">Member ID</th>
                       <th className="py-2.5 px-3">Remarks</th>
                       {false && (
                         <th className="py-2.5 px-3 text-center">Actions</th>
@@ -1712,6 +1746,7 @@ export default function Dashboard({
                         return (
                           <tr key={tx.id} className="hover:bg-slate-50/40 transition-colors">
                             <td className="py-3 px-3 font-mono font-bold text-slate-500">{idx + 1}</td>
+                            <td className="py-3 px-3 font-mono text-slate-700 font-semibold">{tx.voucherNumber || "—"}</td>
                             <td className="py-3 px-3 font-mono text-slate-600">{tx.chapterIdInput || tx.chapterId}</td>
                             <td className="py-3 px-3 font-semibold text-slate-800">{chapterName}</td>
                             <td className="py-3 px-3 font-mono text-slate-600 whitespace-nowrap">{tx.date ? formatDateDMY(tx.date) : "—"}</td>
@@ -1735,7 +1770,6 @@ export default function Dashboard({
                                 {tx.paymentMode || "Bank"}
                               </span>
                             </td>
-                            <td className="py-3 px-3 font-mono font-bold text-slate-700">{tx.paidByMemberId || "—"}</td>
                             <td className="py-3 px-3 text-slate-500 max-w-xs truncate" title={tx.remarks || undefined}>{tx.remarks || "—"}</td>
                             {false && (
                               <td className="py-3 px-3 text-center">
@@ -1783,12 +1817,12 @@ export default function Dashboard({
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-wider">
                       <th className="py-2.5 px-3">Sl. No.</th>
+                      <th className="py-2.5 px-3">Voucher No.</th>
                       <th className="py-2.5 px-3">Chapter ID</th>
                       <th className="py-2.5 px-3">Chapter Name</th>
                       <th className="py-2.5 px-3">Date</th>
-                      <th className="py-2.5 px-3">Paid To Type</th>
-                      <th className="py-2.5 px-3">Recipient ID</th>
-                      <th className="py-2.5 px-3">Recipient Name</th>
+                      <th className="py-2.5 px-3">Paid To</th>
+                      <th className="py-2.5 px-3">Paid To ID</th>
                       <th className="py-2.5 px-3">Particulars</th>
                       <th className="py-2.5 px-3">Mode</th>
                       <th className="py-2.5 px-3 text-right">Loan Amount (₹)</th>
@@ -1817,12 +1851,12 @@ export default function Dashboard({
                         return (
                           <tr key={tx.id} className="hover:bg-slate-50/40 transition-colors">
                             <td className="py-3 px-3 font-mono font-bold text-slate-500">{idx + 1}</td>
+                            <td className="py-3 px-3 font-mono text-slate-700 font-semibold">{tx.voucherNumber || "—"}</td>
                             <td className="py-3 px-3 font-mono text-slate-600">{tx.chapterIdInput || tx.chapterId}</td>
                             <td className="py-3 px-3 font-semibold text-slate-800">{chapterName}</td>
                             <td className="py-3 px-3 font-mono text-slate-600 whitespace-nowrap">{tx.date ? formatDateDMY(tx.date) : "—"}</td>
-                            <td className="py-3 px-3 capitalize font-medium text-slate-600">{tx.paidToCategory || tx.paidTo || "Member"}</td>
+                            <td className="py-3 px-3 font-semibold text-slate-800">{tx.paidTo || tx.paidToName || "—"}</td>
                             <td className="py-3 px-3 font-mono font-bold text-slate-700">{tx.paidToId || "—"}</td>
-                            <td className="py-3 px-3 font-semibold text-slate-800">{tx.paidToName || "—"}</td>
                             <td className="py-3 px-3 text-slate-600 max-w-xs truncate" title={tx.particulars || tx.description}>{tx.particulars || tx.description || "—"}</td>
                             <td className="py-3 px-3">
                               <div className="flex flex-col gap-1">
@@ -2423,18 +2457,6 @@ export default function Dashboard({
       {/* SECTION 3: SPECIFIC REPORT */}
       {reportSection === "specific" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-            <button
-              type="button"
-              onClick={() => handleSelectSection(null)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold text-xs shadow-2xs cursor-pointer"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back to Reports</span>
-            </button>
-            <h2 className="text-base font-bold text-emerald-950">Specific Report</h2>
-          </div>
-
           <ReportWizard
             currentUser={currentUser}
             accountHeads={accountHeads}

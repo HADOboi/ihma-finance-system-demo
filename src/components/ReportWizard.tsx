@@ -496,7 +496,7 @@ export default function ReportWizard({
 
         <div className="text-center min-w-0 flex-1 px-1">
           <h3 className="font-bold text-xs sm:text-sm text-slate-900 font-display truncate">
-            Guided Report
+            Specific Report
           </h3>
           <p className="text-[10px] text-slate-500 font-medium truncate">{scopeLabel}</p>
         </div>

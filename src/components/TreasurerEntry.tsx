@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useEffect } from "react";
-import {
-  User,
+import type {
+  User as UserType,
   AccountHead,
   HeadType,
   Transaction,
@@ -24,7 +24,7 @@ import {
   ArrowLeft,
   Check,
   Search,
-  User as UserIcon,
+  User,
   Calendar,
   CreditCard,
   Building,
@@ -53,10 +53,28 @@ import {
   BarChart3,
   ArrowUpRight,
   ArrowDownRight,
+  Stethoscope,
+  Crown,
+  GraduationCap,
+  Percent,
+  Banknote,
+  Paperclip,
+  Car,
+  Printer,
+  Mail,
+  Laptop,
+  Globe,
+  Smartphone,
+  Image,
+  Wrench,
+  RefreshCw,
+  Rocket,
+  FileText,
+  BadgeCheck,
 } from "lucide-react";
 
 interface TreasurerEntryProps {
-  currentUser: User;
+  currentUser: UserType;
   accountHeads: AccountHead[];
   membersList?: Member[];
   chapterDirectory?: ChapterMaster[];
@@ -566,7 +584,6 @@ export default function TreasurerEntry({
       return [
         { id: "member_basic", title: "Doctor's Name & Demographics", sub: "" },
         { id: "member_qualifications", title: "Academic Degrees & Qualifications", sub: "" },
-        { id: "member_practice", title: "Clinical Specialty & Address", sub: "" },
         { id: "member_contact", title: "Contact Information", sub: "" },
         { id: "review", title: "Review and Save", sub: "" },
       ];
@@ -676,7 +693,6 @@ export default function TreasurerEntry({
       const hasTempDegree = !!formData.tempDegree;
       return hasList || hasQuals || hasQualStr || hasTempDegree;
     }
-    if (sId === "member_practice") return true;
     if (sId === "member_contact") {
       const digits = (formData.mobileNumber || "").replace(/\D/g, "");
       return digits.length === 10;
@@ -938,27 +954,27 @@ export default function TreasurerEntry({
     setIsSuccess(true);
   };
 
-  // Income Heads
+  // Income Heads with sleek Lucide icons matching Read-Only / Dashboard views
   const incomeHeads = [
-    { key: "membership", label: "Membership", sub: "Silver (1 yr), Gold (12 yrs), Platinum (Lifelong)", icon: "🪪" },
-    { key: "sponsorship", label: "Sponsorship", sub: "Event or corporate chapter sponsorship", icon: "💎" },
-    { key: "donation", label: "Donation", sub: "Voluntary contribution or doctor endowment", icon: "🤝" },
-    { key: "coaching_programs", label: "Coaching Programs", sub: "Academic courses, seminars, workshops", icon: "🎓" },
-    { key: "profit_share", label: "Profit Share", sub: "Shared revenue from CME or publications", icon: "📈" },
-    { key: "rent", label: "Rent", sub: "Rental income from chapter premises or equipment", icon: "🏢" },
-    { key: "bank_income", label: "Bank Income", sub: "Savings interest or FD maturity interest", icon: "🏦" },
-    { key: "others", label: "Others", sub: "Unclassified chapter receipt or category", icon: "📎" },
+    { key: "membership", label: "Membership", sub: "Silver (1 yr), Gold (12 yrs), Platinum (Lifelong)", icon: Award },
+    { key: "sponsorship", label: "Sponsorship", sub: "Event or corporate chapter sponsorship", icon: Sparkles },
+    { key: "donation", label: "Donation", sub: "Voluntary contribution or doctor endowment", icon: DollarSign },
+    { key: "coaching_programs", label: "Coaching Programs", sub: "Academic courses, seminars, workshops", icon: GraduationCap },
+    { key: "profit_share", label: "Profit Share", sub: "Shared revenue from CME or publications", icon: TrendingUp },
+    { key: "rent", label: "Rent", sub: "Rental income from chapter premises or equipment", icon: Building2 },
+    { key: "bank_income", label: "Bank Income", sub: "Savings interest or FD maturity interest", icon: Landmark },
+    { key: "others", label: "Others", sub: "Unclassified chapter receipt or category", icon: Paperclip },
   ];
 
   // Expense Heads
   const expenseHeads = [
-    { key: "TA_DA", label: "TA & DA", sub: "Travel allowance & daily allowance", icon: "🚗" },
-    { key: "meeting", label: "Meeting Expense", sub: "Hall hire, refreshments & meeting logistics", icon: "🏛️" },
-    { key: "printing_stationery", label: "Printing & Stationary", sub: "Certificates, banners, registers & stationery", icon: "🖨️" },
-    { key: "postage", label: "Postage", sub: "Courier, registered mail & postal charges", icon: "📮" },
-    { key: "digital_media", label: "Digital Media", sub: "Website, Application, Posters with sub-charges", icon: "💻" },
-    { key: "bank_expense", label: "Bank charges", sub: "Bank ledger charges, cheque book fees", icon: "🏦" },
-    { key: "others", label: "Others", sub: "Unclassified or custom expense category", icon: "📎" },
+    { key: "TA_DA", label: "TA & DA", sub: "Travel allowance & daily allowance", icon: Car },
+    { key: "meeting", label: "Meeting Expense", sub: "Hall hire, refreshments & meeting logistics", icon: Building },
+    { key: "printing_stationery", label: "Printing & Stationary", sub: "Certificates, banners, registers & stationery", icon: Printer },
+    { key: "postage", label: "Postage", sub: "Courier, registered mail & postal charges", icon: Mail },
+    { key: "digital_media", label: "Digital Media", sub: "Website, Application, Posters with sub-charges", icon: Laptop },
+    { key: "bank_expense", label: "Bank charges", sub: "Bank ledger charges, cheque book fees", icon: Landmark },
+    { key: "others", label: "Others", sub: "Unclassified or custom expense category", icon: Paperclip },
   ];
 
   // Filter members for picker in alphabetical order
@@ -1022,8 +1038,8 @@ export default function TreasurerEntry({
             >
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 w-full">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-teal-400/20 border border-teal-300/30 text-teal-200 flex items-center justify-center text-xl sm:text-2xl shrink-0 group-hover:scale-105 transition-transform">
-                    📊
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-teal-400/20 border border-teal-300/30 text-teal-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6" />
                   </div>
                   <div>
                     <h3 className="font-bold text-base sm:text-lg text-white font-display">
@@ -1044,8 +1060,8 @@ export default function TreasurerEntry({
               className="group bg-white p-5 rounded-2xl border border-teal-100 shadow-xs hover:shadow-md hover:border-teal-500 transition-all text-left flex flex-col justify-between cursor-pointer"
             >
               <div className="flex items-center justify-between">
-                <div className="w-12 h-12 rounded-xl bg-teal-50 text-teal-800 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
-                  💰
+                <div className="w-12 h-12 rounded-xl bg-teal-50 text-teal-800 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <ArrowDownRight className="h-6 w-6 text-teal-700" />
                 </div>
                 <ChevronRight className="h-5 w-5 text-teal-600 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -1060,8 +1076,8 @@ export default function TreasurerEntry({
               className="group bg-white p-5 rounded-2xl border border-amber-100 shadow-xs hover:shadow-md hover:border-amber-500 transition-all text-left flex flex-col justify-between cursor-pointer"
             >
               <div className="flex items-center justify-between">
-                <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
-                  🧾
+                <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <ArrowUpRight className="h-6 w-6 text-amber-700" />
                 </div>
                 <ChevronRight className="h-5 w-5 text-amber-600 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -1076,8 +1092,8 @@ export default function TreasurerEntry({
               className="group bg-white p-5 rounded-2xl border border-indigo-100 shadow-xs hover:shadow-md hover:border-indigo-500 transition-all text-left flex flex-col justify-between cursor-pointer"
             >
               <div className="flex items-center justify-between">
-                <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-800 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
-                  💼
+                <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-800 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <Briefcase className="h-6 w-6 text-indigo-700" />
                 </div>
                 <ChevronRight className="h-5 w-5 text-indigo-600 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -1092,8 +1108,8 @@ export default function TreasurerEntry({
               className="group bg-white p-5 rounded-2xl border border-emerald-100 shadow-xs hover:shadow-md hover:border-emerald-500 transition-all text-left flex flex-col justify-between cursor-pointer"
             >
               <div className="flex items-center justify-between">
-                <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
-                  👥
+                <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <Users className="h-6 w-6 text-emerald-700" />
                 </div>
                 <ChevronRight className="h-5 w-5 text-emerald-600 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -1108,8 +1124,8 @@ export default function TreasurerEntry({
               className="group bg-white p-5 rounded-2xl border border-sky-100 shadow-xs hover:shadow-md hover:border-sky-500 transition-all text-left flex flex-col justify-between cursor-pointer"
             >
               <div className="flex items-center justify-between">
-                <div className="w-12 h-12 rounded-xl bg-sky-50 text-sky-800 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
-                  🏢
+                <div className="w-12 h-12 rounded-xl bg-sky-50 text-sky-800 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <Building2 className="h-6 w-6 text-sky-700" />
                 </div>
                 <ChevronRight className="h-5 w-5 text-sky-600 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -1124,8 +1140,8 @@ export default function TreasurerEntry({
               className="group bg-white p-5 rounded-2xl border border-purple-100 shadow-xs hover:shadow-md hover:border-purple-500 transition-all text-left flex flex-col justify-between cursor-pointer"
             >
               <div className="flex items-center justify-between">
-                <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-800 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
-                  📜
+                <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-800 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <Landmark className="h-6 w-6 text-purple-700" />
                 </div>
                 <ChevronRight className="h-5 w-5 text-purple-600 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -1241,11 +1257,11 @@ export default function TreasurerEntry({
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-slate-100">
                           <div className="flex items-center gap-3">
                             <div
-                              className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${
+                              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                                 isSettled ? "bg-emerald-100 text-emerald-800" : "bg-indigo-100 text-indigo-800"
                               }`}
                             >
-                              {isSettled ? "✅" : "💼"}
+                              {isSettled ? <CheckCircle2 className="h-5 w-5" /> : <Briefcase className="h-5 w-5" />}
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
@@ -1524,7 +1540,7 @@ export default function TreasurerEntry({
                           : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
                       }`}
                     >
-                      <span className="text-base">💵</span>
+                      <Banknote className="h-4 w-4" />
                       <span>Cash</span>
                     </button>
                     <button
@@ -1536,7 +1552,7 @@ export default function TreasurerEntry({
                           : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
                       }`}
                     >
-                      <span className="text-base">🏦</span>
+                      <Landmark className="h-4 w-4" />
                       <span>Bank Transfer / Cheque</span>
                     </button>
                   </div>
@@ -1591,8 +1607,18 @@ export default function TreasurerEntry({
                   {/* Mode of Repayment */}
                   <div className="flex justify-between py-1.5 border-b border-slate-200">
                     <span className="text-slate-500 font-semibold">Mode of Repayment:</span>
-                    <span className="font-bold text-emerald-800">
-                      {repaymentMode === "Cash" ? "💵 Cash" : "🏦 Bank Transfer / Cheque"}
+                    <span className="font-bold text-emerald-800 flex items-center gap-1">
+                      {repaymentMode === "Cash" ? (
+                        <>
+                          <Banknote className="h-3.5 w-3.5" />
+                          <span>Cash</span>
+                        </>
+                      ) : (
+                        <>
+                          <Landmark className="h-3.5 w-3.5" />
+                          <span>Bank Transfer / Cheque</span>
+                        </>
+                      )}
                     </span>
                   </div>
 
@@ -1872,7 +1898,7 @@ export default function TreasurerEntry({
                             >
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs">
-                                  👤
+                                  <User className="h-4 w-4" />
                                 </div>
                                 <div>
                                   <h4 className="font-bold text-xs text-slate-900">Guest or Non-Registered Collector</h4>
@@ -1910,7 +1936,7 @@ export default function TreasurerEntry({
                             >
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full bg-teal-50 text-teal-700 font-bold flex items-center justify-center text-xs">
-                                  🩺
+                                  <Stethoscope className="h-4 w-4" />
                                 </div>
                                 <div>
                                   <h4 className="font-bold text-xs text-slate-900">{m.memberName}</h4>
@@ -1949,7 +1975,7 @@ export default function TreasurerEntry({
                             >
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs">
-                                  👤
+                                  <User className="h-4 w-4" />
                                 </div>
                                 <div>
                                   <h4 className="font-bold text-xs text-slate-900">Guest or Non-Registered Collector</h4>
@@ -2024,7 +2050,7 @@ export default function TreasurerEntry({
                             >
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 font-bold flex items-center justify-center text-xs">
-                                  ➕
+                                  <UserPlus className="h-4 w-4" />
                                 </div>
                                 <div>
                                   <h4 className="font-bold text-xs text-slate-900">Guest or Non-Registered Payer</h4>
@@ -2061,7 +2087,7 @@ export default function TreasurerEntry({
                             >
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full bg-teal-100 text-teal-800 font-bold flex items-center justify-center text-xs">
-                                  👤
+                                  <Stethoscope className="h-4 w-4" />
                                 </div>
                                 <div>
                                   <h4 className="font-bold text-xs text-slate-900">{m.memberName}</h4>
@@ -2100,7 +2126,7 @@ export default function TreasurerEntry({
                             >
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 font-bold flex items-center justify-center text-xs">
-                                  ➕
+                                  <UserPlus className="h-4 w-4" />
                                 </div>
                                 <div>
                                   <h4 className="font-bold text-xs text-slate-900">Guest or Non-Registered Payer</h4>
@@ -2144,34 +2170,41 @@ export default function TreasurerEntry({
                           Select Income Head
                         </label>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {incomeHeads.map((head) => (
-                            <div
-                              key={head.key}
-                              onClick={() => setFormData({ ...formData, category: head.key })}
-                              className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                                formData.category === head.key
-                                  ? "border-[#0F6E5D] bg-[#E4F1EE]"
-                                  : "border-slate-200 hover:border-slate-300 bg-white"
-                              }`}
-                            >
-                              <div className="flex items-center gap-3">
-                                <span className="text-2xl">{head.icon}</span>
-                                <div>
-                                  <h4 className="font-bold text-sm text-slate-900">{head.label}</h4>
-                                  <p className="text-[11px] text-slate-500">{head.sub}</p>
-                                </div>
-                              </div>
+                          {incomeHeads.map((head) => {
+                            const HeadIcon = head.icon;
+                            return (
                               <div
-                                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                key={head.key}
+                                onClick={() => setFormData({ ...formData, category: head.key })}
+                                className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                                   formData.category === head.key
-                                    ? "border-[#0F6E5D] bg-[#0F6E5D] text-white"
-                                    : "border-slate-300 bg-white"
+                                    ? "border-[#0F6E5D] bg-[#E4F1EE]"
+                                    : "border-slate-200 hover:border-slate-300 bg-white"
                                 }`}
                               >
-                                {formData.category === head.key && <Check className="h-3.5 w-3.5" />}
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                                    formData.category === head.key ? "bg-[#0F6E5D] text-white" : "bg-teal-50 text-teal-700"
+                                  }`}>
+                                    <HeadIcon className="h-5 w-5" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-bold text-sm text-slate-900">{head.label}</h4>
+                                    <p className="text-[11px] text-slate-500">{head.sub}</p>
+                                  </div>
+                                </div>
+                                <div
+                                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                    formData.category === head.key
+                                      ? "border-[#0F6E5D] bg-[#0F6E5D] text-white"
+                                      : "border-slate-300 bg-white"
+                                  }`}
+                                >
+                                  {formData.category === head.key && <Check className="h-3.5 w-3.5" />}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -2183,42 +2216,47 @@ export default function TreasurerEntry({
                           Select Membership Tier
                         </label>
                         {[
-                          { key: "Silver (1 year)", label: "Silver", tenure: "1 Year", sub: "1 Year membership subscription", icon: "🥈" },
-                          { key: "Gold (12 years)", label: "Gold", tenure: "12 Years", sub: "12 Years long-term membership", icon: "🥇" },
-                          { key: "Platinum (lifelong)", label: "Platinum", tenure: "Lifelong", sub: "Lifelong permanent membership", icon: "💎" },
-                        ].map((tier) => (
-                          <div
-                            key={tier.key}
-                            onClick={() => setFormData({ ...formData, membershipTier: tier.key, offeredAmount: tier.key.startsWith("Silver") ? 400 : tier.key.startsWith("Gold") ? 4000 : tier.key.startsWith("Platinum") ? 7000 : formData.offeredAmount })}
-                            className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                              formData.membershipTier === tier.key
-                                ? "border-[#0F6E5D] bg-[#E4F1EE]"
-                                : "border-slate-200 hover:border-slate-300 bg-white"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-2xl">{tier.icon}</span>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <h4 className="font-bold text-sm text-slate-900">{tier.label}</h4>
-                                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800">
-                                    {tier.tenure}
-                                  </span>
-                                </div>
-                                <p className="text-xs text-slate-500 mt-0.5">{tier.sub}</p>
-                              </div>
-                            </div>
+                          { key: "Silver (1 year)", label: "Silver", tenure: "1 Year", sub: "1 Year membership subscription", icon: Award, color: "text-slate-600 bg-slate-100" },
+                          { key: "Gold (12 years)", label: "Gold", tenure: "12 Years", sub: "12 Years long-term membership", icon: Crown, color: "text-amber-700 bg-amber-100" },
+                          { key: "Platinum (lifelong)", label: "Platinum", tenure: "Lifelong", sub: "Lifelong permanent membership", icon: Sparkles, color: "text-purple-700 bg-purple-100" },
+                        ].map((tier) => {
+                          const TierIcon = tier.icon;
+                          return (
                             <div
-                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                              key={tier.key}
+                              onClick={() => setFormData({ ...formData, membershipTier: tier.key, offeredAmount: tier.key.startsWith("Silver") ? 400 : tier.key.startsWith("Gold") ? 4000 : tier.key.startsWith("Platinum") ? 7000 : formData.offeredAmount })}
+                              className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                                 formData.membershipTier === tier.key
-                                  ? "border-[#0F6E5D] bg-[#0F6E5D] text-white"
-                                  : "border-slate-300 bg-white"
+                                  ? "border-[#0F6E5D] bg-[#E4F1EE]"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
                               }`}
                             >
-                              {formData.membershipTier === tier.key && <Check className="h-3.5 w-3.5" />}
+                              <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${tier.color}`}>
+                                  <TierIcon className="h-5 w-5" />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-bold text-sm text-slate-900">{tier.label}</h4>
+                                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800">
+                                      {tier.tenure}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-slate-500 mt-0.5">{tier.sub}</p>
+                                </div>
+                              </div>
+                              <div
+                                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                  formData.membershipTier === tier.key
+                                    ? "border-[#0F6E5D] bg-[#0F6E5D] text-white"
+                                    : "border-slate-300 bg-white"
+                                }`}
+                              >
+                                {formData.membershipTier === tier.key && <Check className="h-3.5 w-3.5" />}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
 
@@ -2341,7 +2379,9 @@ export default function TreasurerEntry({
                                 : "border-slate-200 hover:border-slate-300 bg-white"
                             }`}
                           >
-                            <div className="text-4xl">💵</div>
+                            <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center mx-auto">
+                              <Wallet className="h-5 w-5" />
+                            </div>
                             <h4 className="font-bold text-base text-slate-900">Cash Payment</h4>
                             <p className="text-xs text-slate-500">Physical cash received directly into chapter drawer.</p>
                           </div>
@@ -2354,7 +2394,9 @@ export default function TreasurerEntry({
                                 : "border-slate-200 hover:border-slate-300 bg-white"
                             }`}
                           >
-                            <div className="text-4xl">🏦</div>
+                            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center mx-auto">
+                              <Landmark className="h-5 w-5" />
+                            </div>
                             <h4 className="font-bold text-base text-slate-900">Bank Transfer / UPI</h4>
                             <p className="text-xs text-slate-500">Direct bank deposit, UPI, GPay, Cheque, or NEFT/RTGS.</p>
                           </div>
@@ -2539,7 +2581,7 @@ export default function TreasurerEntry({
                             >
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs">
-                                  👤
+                                  <UserPlus className="h-4 w-4 text-slate-600" />
                                 </div>
                                 <div>
                                   <h4 className="font-bold text-xs text-slate-900">Guest or Non-Registered Payer</h4>
@@ -2576,8 +2618,8 @@ export default function TreasurerEntry({
                               }`}
                             >
                               <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-800 font-bold flex items-center justify-center text-xs">
-                                  🩺
+                                <div className="w-8 h-8 rounded-full bg-amber-50 text-amber-800 font-bold flex items-center justify-center text-xs">
+                                  <Stethoscope className="h-4 w-4" />
                                 </div>
                                 <div>
                                   <h4 className="font-bold text-xs text-slate-900">{m.memberName}</h4>
@@ -2616,7 +2658,7 @@ export default function TreasurerEntry({
                             >
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs">
-                                  👤
+                                  <UserPlus className="h-4 w-4 text-slate-600" />
                                 </div>
                                 <div>
                                   <h4 className="font-bold text-xs text-slate-900">Guest or Non-Registered Payer</h4>
@@ -2677,40 +2719,47 @@ export default function TreasurerEntry({
                           Select Expense Head
                         </label>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {expenseHeads.map((head) => (
-                            <div
-                              key={head.key}
-                              onClick={() =>
-                                setFormData({
-                                  ...formData,
-                                  category: head.key,
-                                  paymentMode: head.key === "bank_expense" ? "Bank" : formData.paymentMode,
-                                })
-                              }
-                              className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                                formData.category === head.key
-                                  ? "border-amber-600 bg-amber-50"
-                                  : "border-slate-200 hover:border-slate-300 bg-white"
-                              }`}
-                            >
-                              <div className="flex items-center gap-3">
-                                <span className="text-2xl">{head.icon}</span>
-                                <div>
-                                  <h4 className="font-bold text-sm text-slate-900">{head.label}</h4>
-                                  <p className="text-[11px] text-slate-500">{head.sub}</p>
-                                </div>
-                              </div>
+                          {expenseHeads.map((head) => {
+                            const HeadIcon = head.icon;
+                            return (
                               <div
-                                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                key={head.key}
+                                onClick={() =>
+                                  setFormData({
+                                    ...formData,
+                                    category: head.key,
+                                    paymentMode: head.key === "bank_expense" ? "Bank" : formData.paymentMode,
+                                  })
+                                }
+                                className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                                   formData.category === head.key
-                                    ? "border-amber-600 bg-amber-600 text-white"
-                                    : "border-slate-300 bg-white"
+                                    ? "border-amber-600 bg-amber-50"
+                                    : "border-slate-200 hover:border-slate-300 bg-white"
                                 }`}
                               >
-                                {formData.category === head.key && <Check className="h-3.5 w-3.5" />}
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                                    formData.category === head.key ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-700"
+                                  }`}>
+                                    <HeadIcon className="h-5 w-5" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-bold text-sm text-slate-900">{head.label}</h4>
+                                    <p className="text-[11px] text-slate-500">{head.sub}</p>
+                                  </div>
+                                </div>
+                                <div
+                                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                    formData.category === head.key
+                                      ? "border-amber-600 bg-amber-600 text-white"
+                                      : "border-slate-300 bg-white"
+                                  }`}
+                                >
+                                  {formData.category === head.key && <Check className="h-3.5 w-3.5" />}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -2723,37 +2772,44 @@ export default function TreasurerEntry({
                         </label>
 
                         {[
-                          { key: "Website", label: "Website", sub: "Web portal design, domain, or hosting", icon: "🌐" },
-                          { key: "Application", label: "Application", sub: "Mobile app build or maintenance", icon: "📱" },
-                          { key: "Posters", label: "Posters", sub: "Social media banners, flyer graphics", icon: "🖼️" },
-                        ].map((dt) => (
-                          <div
-                            key={dt.key}
-                            onClick={() => setFormData({ ...formData, digitalMediaType: dt.key })}
-                            className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                              formData.digitalMediaType === dt.key
-                                ? "border-amber-600 bg-amber-50"
-                                : "border-slate-200 hover:border-slate-300 bg-white"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-2xl">{dt.icon}</span>
-                              <div>
-                                <h4 className="font-bold text-sm text-slate-900">{dt.label}</h4>
-                                <p className="text-xs text-slate-500 mt-0.5">{dt.sub}</p>
-                              </div>
-                            </div>
+                          { key: "Website", label: "Website", sub: "Web portal design, domain, or hosting", icon: Globe },
+                          { key: "Application", label: "Application", sub: "Mobile app build or maintenance", icon: Smartphone },
+                          { key: "Posters", label: "Posters", sub: "Social media banners, flyer graphics", icon: Image },
+                        ].map((dt) => {
+                          const MediaIcon = dt.icon;
+                          return (
                             <div
-                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                              key={dt.key}
+                              onClick={() => setFormData({ ...formData, digitalMediaType: dt.key })}
+                              className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                                 formData.digitalMediaType === dt.key
-                                  ? "border-amber-600 bg-amber-600 text-white"
-                                  : "border-slate-300 bg-white"
+                                  ? "border-amber-600 bg-amber-50"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
                               }`}
                             >
-                              {formData.digitalMediaType === dt.key && <Check className="h-3.5 w-3.5" />}
+                              <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                                  formData.digitalMediaType === dt.key ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-700"
+                                }`}>
+                                  <MediaIcon className="h-5 w-5" />
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-sm text-slate-900">{dt.label}</h4>
+                                  <p className="text-xs text-slate-500 mt-0.5">{dt.sub}</p>
+                                </div>
+                              </div>
+                              <div
+                                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                  formData.digitalMediaType === dt.key
+                                    ? "border-amber-600 bg-amber-600 text-white"
+                                    : "border-slate-300 bg-white"
+                                }`}
+                              >
+                                {formData.digitalMediaType === dt.key && <Check className="h-3.5 w-3.5" />}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
 
@@ -2765,37 +2821,44 @@ export default function TreasurerEntry({
                         </label>
 
                         {[
-                          { key: "Development charge", label: "Development Charge", sub: "Initial building, coding, or setup", icon: "🛠️" },
-                          { key: "Annual Maintenance charge", label: "Annual Maintenance Charge (AMC)", sub: "Server hosting, domain renewal, yearly maintenance", icon: "🔄" },
-                          { key: "Upgrade charge", label: "Upgrade Charge", sub: "New feature additions or software upgrades", icon: "🚀" },
-                        ].map((dc) => (
-                          <div
-                            key={dc.key}
-                            onClick={() => setFormData({ ...formData, digitalMediaCharge: dc.key })}
-                            className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                              formData.digitalMediaCharge === dc.key
-                                ? "border-amber-600 bg-amber-50"
-                                : "border-slate-200 hover:border-slate-300 bg-white"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-2xl">{dc.icon}</span>
-                              <div>
-                                <h4 className="font-bold text-sm text-slate-900">{dc.label}</h4>
-                                <p className="text-xs text-slate-500 mt-0.5">{dc.sub}</p>
-                              </div>
-                            </div>
+                          { key: "Development charge", label: "Development Charge", sub: "Initial building, coding, or setup", icon: Wrench },
+                          { key: "Annual Maintenance charge", label: "Annual Maintenance Charge (AMC)", sub: "Server hosting, domain renewal, yearly maintenance", icon: RefreshCw },
+                          { key: "Upgrade charge", label: "Upgrade Charge", sub: "New feature additions or software upgrades", icon: Rocket },
+                        ].map((dc) => {
+                          const ChargeIcon = dc.icon;
+                          return (
                             <div
-                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                              key={dc.key}
+                              onClick={() => setFormData({ ...formData, digitalMediaCharge: dc.key })}
+                              className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                                 formData.digitalMediaCharge === dc.key
-                                  ? "border-amber-600 bg-amber-600 text-white"
-                                  : "border-slate-300 bg-white"
+                                  ? "border-amber-600 bg-amber-50"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
                               }`}
                             >
-                              {formData.digitalMediaCharge === dc.key && <Check className="h-3.5 w-3.5" />}
+                              <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                                  formData.digitalMediaCharge === dc.key ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-700"
+                                }`}>
+                                  <ChargeIcon className="h-5 w-5" />
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-sm text-slate-900">{dc.label}</h4>
+                                  <p className="text-xs text-slate-500 mt-0.5">{dc.sub}</p>
+                                </div>
+                              </div>
+                              <div
+                                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                  formData.digitalMediaCharge === dc.key
+                                    ? "border-amber-600 bg-amber-600 text-white"
+                                    : "border-slate-300 bg-white"
+                                }`}
+                              >
+                                {formData.digitalMediaCharge === dc.key && <Check className="h-3.5 w-3.5" />}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
 
@@ -2909,47 +2972,39 @@ export default function TreasurerEntry({
                           Select Mode of Payment
                         </label>
 
-                        {formData.category === "bank_expense" ? (
-                          <div className="p-5 rounded-2xl border-2 border-blue-500 bg-blue-50/60 text-center space-y-2">
-                            <div className="w-12 h-12 bg-blue-100 text-blue-700 rounded-2xl flex items-center justify-center mx-auto mb-1">
-                              <Lock className="h-6 w-6" />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div
+                            onClick={formData.category === "bank_expense" ? undefined : () => setFormData({ ...formData, paymentMode: "Cash" })}
+                            className={`p-5 rounded-2xl border-2 transition-all text-center space-y-2 ${
+                              formData.category === "bank_expense"
+                                ? "border-slate-200 bg-slate-50 opacity-40 cursor-not-allowed select-none"
+                                : formData.paymentMode === "Cash"
+                                ? "border-amber-600 bg-amber-50 ring-2 ring-amber-500/20 cursor-pointer"
+                                : "border-slate-200 hover:border-slate-300 bg-white cursor-pointer"
+                            }`}
+                          >
+                            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center mx-auto">
+                              <Wallet className="h-5 w-5" />
                             </div>
-                            <h4 className="font-bold text-base text-blue-900">Bank Transfer (Locked)</h4>
-                            <p className="text-xs text-blue-700 font-medium">Bank charges are strictly processed via direct bank debit / transfer.</p>
+                            <h4 className="font-bold text-base text-slate-900">Cash Payment</h4>
+                            <p className="text-xs text-slate-500">Paid out in cash from physical chapter cash drawer.</p>
                           </div>
-                        ) : (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div
-                              onClick={() => setFormData({ ...formData, paymentMode: "Cash" })}
-                              className={`p-5 rounded-2xl border-2 transition-all cursor-pointer text-center space-y-2 ${
-                                formData.paymentMode === "Cash"
-                                  ? "border-amber-600 bg-amber-50 ring-2 ring-amber-500/20"
-                                  : "border-slate-200 hover:border-slate-300 bg-white"
-                              }`}
-                            >
-                              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center mx-auto">
-                                <Wallet className="h-5 w-5" />
-                              </div>
-                              <h4 className="font-bold text-base text-slate-900">Cash Payment</h4>
-                              <p className="text-xs text-slate-500">Paid out in cash from physical chapter cash drawer.</p>
-                            </div>
 
-                            <div
-                              onClick={() => setFormData({ ...formData, paymentMode: "Bank" })}
-                              className={`p-5 rounded-2xl border-2 transition-all cursor-pointer text-center space-y-2 ${
-                                formData.paymentMode === "Bank"
-                                  ? "border-amber-600 bg-amber-50 ring-2 ring-amber-500/20"
-                                  : "border-slate-200 hover:border-slate-300 bg-white"
-                              }`}
-                            >
-                              <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center mx-auto">
-                                <Landmark className="h-5 w-5" />
-                              </div>
-                              <h4 className="font-bold text-base text-slate-900">Bank Transfer / Cheque</h4>
-                              <p className="text-xs text-slate-500">Paid directly from bank account via cheque, NEFT, or UPI.</p>
+                          <div
+                            onClick={() => setFormData({ ...formData, paymentMode: "Bank" })}
+                            className={`p-5 rounded-2xl border-2 transition-all cursor-pointer text-center space-y-2 ${
+                              formData.paymentMode === "Bank"
+                                ? "border-amber-600 bg-amber-50 ring-2 ring-amber-500/20"
+                                : "border-slate-200 hover:border-slate-300 bg-white"
+                            }`}
+                          >
+                            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center mx-auto">
+                              <Landmark className="h-5 w-5" />
                             </div>
+                            <h4 className="font-bold text-base text-slate-900">Bank Transfer / Cheque</h4>
+                            <p className="text-xs text-slate-500">Paid directly from bank account via cheque, NEFT, or UPI.</p>
                           </div>
-                        )}
+                        </div>
                       </div>
                     )}
 
@@ -3348,23 +3403,27 @@ export default function TreasurerEntry({
                           </label>
                           <div className="grid grid-cols-3 gap-2.5">
                             {[
-                              { key: "Male", label: "👨 Male" },
-                              { key: "Female", label: "👩 Female" },
-                              { key: "Other", label: "👤 Other" },
-                            ].map((g) => (
-                              <button
-                                key={g.key}
-                                type="button"
-                                onClick={() => setFormData({ ...formData, gender: g.key })}
-                                className={`py-3 px-3 rounded-xl border-2 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                                  formData.gender === g.key
-                                    ? "bg-teal-700 text-white border-teal-700 shadow-xs"
-                                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                                }`}
-                              >
-                                {g.label}
-                              </button>
-                            ))}
+                              { key: "Male", label: "Male", icon: User },
+                              { key: "Female", label: "Female", icon: User },
+                              { key: "Other", label: "Other", icon: User },
+                            ].map((g) => {
+                              const GIcon = g.icon;
+                              return (
+                                <button
+                                  key={g.key}
+                                  type="button"
+                                  onClick={() => setFormData({ ...formData, gender: g.key })}
+                                  className={`py-3 px-3 rounded-xl border-2 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                                    formData.gender === g.key
+                                      ? "bg-teal-700 text-white border-teal-700 shadow-xs"
+                                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  <GIcon className="h-4 w-4" />
+                                  <span>{g.label}</span>
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
 
@@ -3402,6 +3461,26 @@ export default function TreasurerEntry({
                             onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
                             className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-medium"
                           />
+                        </div>
+
+                        {/* IHMA Role */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                            IHMA Role
+                          </label>
+                          <select
+                            value={formData.associationRole || ""}
+                            onChange={(e) => setFormData({ ...formData, associationRole: e.target.value })}
+                            className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-medium text-slate-900"
+                          >
+                            <option value="">Select role</option>
+                            <option value="President">President</option>
+                            <option value="Vice President">Vice President</option>
+                            <option value="Secretary">Secretary</option>
+                            <option value="General Secretary">General Secretary</option>
+                            <option value="Treasurer">Treasurer</option>
+                            <option value="Member">Member</option>
+                          </select>
                         </div>
                       </div>
                     )}
@@ -3672,83 +3751,7 @@ export default function TreasurerEntry({
                       </div>
                     )}
 
-                    {/* Clinical Specialty & Address */}
-                    {currentStepConfig.id === "member_practice" && (
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                            Clinical Specialization
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. General Clinical Homoeopathy, Paediatric Care"
-                            value={formData.specialization || ""}
-                            onChange={(e) => setFormData({ ...formData, specialization: e.target.value })}
-                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-medium text-slate-900"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                            Practice Start Year
-                          </label>
-                          <input
-                            type="number"
-                            placeholder="e.g. 2012"
-                            value={formData.yearsOfPractice || ""}
-                            onChange={(e) => setFormData({ ...formData, yearsOfPractice: e.target.value })}
-                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-medium text-slate-900"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                            Clinic / Hospital Address
-                          </label>
-                          <textarea
-                            rows={2}
-                            placeholder="e.g. Suite #204, Doctor's Plaza, MG Road, Cochin"
-                            value={formData.clinicAddress || ""}
-                            onChange={(e) => setFormData({ ...formData, clinicAddress: e.target.value })}
-                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-medium text-slate-900"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                            Residential Address
-                          </label>
-                          <textarea
-                            rows={2}
-                            placeholder="e.g. House #14, Green Valley Enclave, Aluva"
-                            value={formData.residentialAddress || ""}
-                            onChange={(e) => setFormData({ ...formData, residentialAddress: e.target.value })}
-                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-medium text-slate-900"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                            IHMA Role
-                          </label>
-                          <select
-                            value={formData.associationRole || ""}
-                            onChange={(e) => setFormData({ ...formData, associationRole: e.target.value })}
-                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-medium text-slate-900"
-                          >
-                            <option value="">Select role</option>
-                            <option value="President">President</option>
-                            <option value="Vice President">Vice President</option>
-                            <option value="Secretary">Secretary</option>
-                            <option value="General Secretary">General Secretary</option>
-                            <option value="Treasurer">Treasurer</option>
-                            <option value="Member">Member</option>
-                          </select>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Step 5: Contact Information */}
+                    {/* Step 3: Contact Information */}
                     {currentStepConfig.id === "member_contact" && (
                       <div className="space-y-4">
                         <div>
@@ -3821,7 +3824,7 @@ export default function TreasurerEntry({
                       </div>
                     )}
 
-                    {/* Step 6: Final Review & Confirm Doctor Profile */}
+                    {/* Step 4: Final Review & Confirm Doctor Profile */}
                     {currentStepConfig.id === "review" && (
                       <div className="space-y-4">
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3.5 text-xs">
@@ -3850,6 +3853,12 @@ export default function TreasurerEntry({
                                 <span className="text-slate-500 text-[11px] block">Date of Birth:</span>
                                 <span className="font-semibold text-slate-800">{formData.dob || "Not Specified"}</span>
                               </div>
+                              {formData.associationRole && (
+                                <div className="sm:col-span-2">
+                                  <span className="text-slate-500 text-[11px] block">IHMA Role:</span>
+                                  <span className="font-semibold text-teal-800">{formData.associationRole}</span>
+                                </div>
+                              )}
                             </div>
                           </div>
 
@@ -3895,42 +3904,7 @@ export default function TreasurerEntry({
                             </div>
                           </div>
 
-                          {/* 4. Clinical Specialty & Practice */}
-                          <div className="space-y-1.5">
-                            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Clinical Practice & Addresses</div>
-                            <div className="space-y-2 bg-white p-2.5 rounded-lg border border-slate-200">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <div>
-                                  <span className="text-slate-500 text-[11px] block">Specialization:</span>
-                                  <span className="font-semibold text-slate-800">{formData.specialization || "General Practice"}</span>
-                                </div>
-                                <div>
-                                  <span className="text-slate-500 text-[11px] block">Practice Experience:</span>
-                                  <span className="font-semibold text-slate-800">{formData.yearsOfPractice || "Not Specified"}</span>
-                                </div>
-                              </div>
-                              {formData.clinicAddress && (
-                                <div>
-                                  <span className="text-slate-500 text-[11px] block">Clinic / Hospital Address:</span>
-                                  <span className="font-medium text-slate-800">{formData.clinicAddress}</span>
-                                </div>
-                              )}
-                              {formData.residentialAddress && (
-                                <div>
-                                  <span className="text-slate-500 text-[11px] block">Residential Address:</span>
-                                  <span className="font-medium text-slate-800">{formData.residentialAddress}</span>
-                                </div>
-                              )}
-                              {formData.associationRole && (
-                                <div>
-                                  <span className="text-slate-500 text-[11px] block">IHMA Association Role:</span>
-                                  <span className="font-semibold text-amber-900">{formData.associationRole}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* 5. Contact Information */}
+                          {/* 4. Contact Information */}
                           <div className="space-y-1.5">
                             <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Contact Information</div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-white p-2.5 rounded-lg border border-slate-200">
@@ -4194,8 +4168,8 @@ export default function TreasurerEntry({
                               }`}
                             >
                               <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-teal-100 text-teal-800 font-bold flex items-center justify-center text-xs">
-                                  👤
+                                <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-800 font-bold flex items-center justify-center text-xs">
+                                  <Stethoscope className="h-4 w-4" />
                                 </div>
                                 <div>
                                   <h4 className="font-bold text-xs text-slate-900">{m.memberName}</h4>
@@ -4336,28 +4310,36 @@ export default function TreasurerEntry({
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div
                             onClick={() => setFormData({ ...formData, amountType: "FD" })}
-                            className={`p-5 rounded-2xl border-2 cursor-pointer text-center transition-all ${
+                            className={`p-5 rounded-2xl border-2 cursor-pointer text-center transition-all flex flex-col items-center justify-center ${
                               formData.amountType === "FD"
                                 ? "border-purple-600 bg-purple-50"
-                                : "border-slate-200 hover:border-slate-300"
+                                : "border-slate-200 hover:border-slate-300 bg-white"
                             }`}
                           >
-                            <div className="text-3xl">📜</div>
-                            <h4 className="font-bold text-sm mt-1">FD</h4>
-                            <p className="text-xs text-slate-500">New fixed deposit opened with the bank.</p>
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-2 ${
+                              formData.amountType === "FD" ? "bg-purple-600 text-white" : "bg-purple-100 text-purple-700"
+                            }`}>
+                              <Landmark className="h-6 w-6" />
+                            </div>
+                            <h4 className="font-bold text-sm">FD</h4>
+                            <p className="text-xs text-slate-500 mt-1">New fixed deposit opened with the bank.</p>
                           </div>
 
                           <div
                             onClick={() => setFormData({ ...formData, amountType: "Bank Interest" })}
-                            className={`p-5 rounded-2xl border-2 cursor-pointer text-center transition-all ${
+                            className={`p-5 rounded-2xl border-2 cursor-pointer text-center transition-all flex flex-col items-center justify-center ${
                               formData.amountType === "Bank Interest"
                                 ? "border-purple-600 bg-purple-50"
-                                : "border-slate-200 hover:border-slate-300"
+                                : "border-slate-200 hover:border-slate-300 bg-white"
                             }`}
                           >
-                            <div className="text-3xl">🏦</div>
-                            <h4 className="font-bold text-sm mt-1">Bank Interest</h4>
-                            <p className="text-xs text-slate-500">Interest credited by the bank, entered as received.</p>
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-2 ${
+                              formData.amountType === "Bank Interest" ? "bg-purple-600 text-white" : "bg-purple-100 text-purple-700"
+                            }`}>
+                              <TrendingUp className="h-6 w-6" />
+                            </div>
+                            <h4 className="font-bold text-sm">Bank Interest</h4>
+                            <p className="text-xs text-slate-500 mt-1">Interest credited by the bank, entered as received.</p>
                           </div>
                         </div>
                       </div>

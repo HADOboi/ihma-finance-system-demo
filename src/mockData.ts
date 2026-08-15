@@ -1973,83 +1973,20 @@ PRELOADED_TRANSACTIONS.push(
   }
 );
 
-// Database Management Helpers
+// In-Memory Database Helpers (localStorage eradicated)
 export function loadDatabase() {
-  const users = localStorage.getItem("ihma_users");
-  const accountHeads = localStorage.getItem("ihma_account_heads");
-  const transactions = localStorage.getItem("ihma_transactions");
-  const assets = localStorage.getItem("ihma_assets");
-  const bankBalances = localStorage.getItem("ihma_bank_balances");
-  const chapterDirectory = localStorage.getItem("ihma_chapter_directory");
-  const members = localStorage.getItem("ihma_members");
-  const dbVersion = localStorage.getItem("ihma_db_version");
-
-  if (
-    !users ||
-    !accountHeads ||
-    !transactions ||
-    !assets ||
-    !bankBalances ||
-    !chapterDirectory ||
-    !members ||
-    dbVersion !== CURRENT_DB_VERSION
-  ) {
-    // Initialize defaults
-    localStorage.setItem("ihma_db_version", CURRENT_DB_VERSION);
-    localStorage.setItem("ihma_users", JSON.stringify(USERS));
-    localStorage.setItem("ihma_account_heads", JSON.stringify(DEFAULT_ACCOUNT_HEADS));
-    localStorage.setItem("ihma_transactions", JSON.stringify(normalizedTransactions()));
-    localStorage.setItem("ihma_assets", JSON.stringify(normalizedAssets()));
-    localStorage.setItem("ihma_bank_balances", JSON.stringify(normalizedBankBalances()));
-    localStorage.setItem("ihma_chapter_directory", JSON.stringify(PRELOADED_CHAPTER_DIRECTORY));
-    localStorage.setItem("ihma_members", JSON.stringify(PRELOADED_MEMBERS));
-
-    return {
-      users: USERS,
-      accountHeads: DEFAULT_ACCOUNT_HEADS,
-      transactions: normalizedTransactions(),
-      assets: normalizedAssets(),
-      bankBalances: normalizedBankBalances(),
-      chapterDirectory: PRELOADED_CHAPTER_DIRECTORY,
-      members: PRELOADED_MEMBERS,
-    };
-  }
-
-  // Add newly introduced demo records without replacing any locally entered data.
-  // Remove the two retired seeded expense heads and their old sample entries.
-  const retiredHeadIds = new Set([
-    "exp_cme_venue",
-    "exp_office_maint",
-    "inc_cme_delegate",
-    "inc_trust_grant",
-  ]);
-  const savedHeads = JSON.parse(accountHeads) as AccountHead[];
-  const savedTransactions = (JSON.parse(transactions) as Transaction[]).map(normalizeFinancialOwnership);
-  const mergedHeads = [
-    ...DEFAULT_ACCOUNT_HEADS,
-    ...savedHeads.filter((head) => !retiredHeadIds.has(head.id) && !DEFAULT_ACCOUNT_HEADS.some((defaultHead) => defaultHead.id === head.id)),
-  ];
-  const seedTransactions = PRELOADED_TRANSACTIONS.filter((tx) => !retiredHeadIds.has(tx.headId));
-  const mergedTransactions = [
-    ...seedTransactions.filter((seed) => !savedTransactions.some((saved) => saved.id === seed.id)),
-    ...savedTransactions.filter((tx) => !retiredHeadIds.has(tx.headId)),
-  ];
-
-  localStorage.setItem("ihma_account_heads", JSON.stringify(mergedHeads));
-  localStorage.setItem("ihma_transactions", JSON.stringify(mergedTransactions));
-
   return {
-    users: JSON.parse(users),
-    accountHeads: mergedHeads,
-    transactions: mergedTransactions,
-    assets: (JSON.parse(assets) as Asset[]).map(normalizeFinancialOwnership),
-    bankBalances: (JSON.parse(bankBalances) as BankBalance[]).map(normalizeFinancialOwnership),
-    chapterDirectory: JSON.parse(chapterDirectory),
-    members: JSON.parse(members),
+    users: USERS,
+    accountHeads: DEFAULT_ACCOUNT_HEADS,
+    transactions: normalizedTransactions(),
+    assets: normalizedAssets(),
+    bankBalances: normalizedBankBalances(),
+    chapterDirectory: PRELOADED_CHAPTER_DIRECTORY,
+    members: PRELOADED_MEMBERS,
   };
 }
 
-export function saveDatabase(data: {
+export function saveDatabase(_data: {
   users: User[];
   accountHeads: AccountHead[];
   transactions: Transaction[];
@@ -2058,26 +1995,10 @@ export function saveDatabase(data: {
   chapterDirectory: ChapterMaster[];
   members: Member[];
 }) {
-  localStorage.setItem("ihma_db_version", CURRENT_DB_VERSION);
-  localStorage.setItem("ihma_users", JSON.stringify(data.users));
-  localStorage.setItem("ihma_account_heads", JSON.stringify(data.accountHeads));
-  localStorage.setItem("ihma_transactions", JSON.stringify(data.transactions));
-  localStorage.setItem("ihma_assets", JSON.stringify(data.assets));
-  localStorage.setItem("ihma_bank_balances", JSON.stringify(data.bankBalances));
-  localStorage.setItem("ihma_chapter_directory", JSON.stringify(data.chapterDirectory));
-  localStorage.setItem("ihma_members", JSON.stringify(data.members));
+  // Pure in-memory: No localStorage persistence. Real persistence is handled via Supabase.
 }
 
 export function resetToDefaults() {
-  localStorage.setItem("ihma_db_version", CURRENT_DB_VERSION);
-  localStorage.setItem("ihma_users", JSON.stringify(USERS));
-  localStorage.setItem("ihma_account_heads", JSON.stringify(DEFAULT_ACCOUNT_HEADS));
-  localStorage.setItem("ihma_transactions", JSON.stringify(normalizedTransactions()));
-  localStorage.setItem("ihma_assets", JSON.stringify(normalizedAssets()));
-  localStorage.setItem("ihma_bank_balances", JSON.stringify(normalizedBankBalances()));
-  localStorage.setItem("ihma_chapter_directory", JSON.stringify(PRELOADED_CHAPTER_DIRECTORY));
-  localStorage.setItem("ihma_members", JSON.stringify(PRELOADED_MEMBERS));
-
   return {
     users: USERS,
     accountHeads: DEFAULT_ACCOUNT_HEADS,

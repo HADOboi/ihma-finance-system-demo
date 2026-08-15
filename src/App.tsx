@@ -8,6 +8,8 @@ import { User, AccountHead, Transaction, OrgLevel, UserRole, HeadType, Asset, Ba
 import { loadDatabase, saveDatabase, resetToDefaults, CHAPTERS } from "./mockData";
 import { ensureDoctorPrefix } from "./utils/formatters";
 import { getChapterCode, getFinancialUnitName, getUserFinancialUnitId, isWritableFinancialUnit } from "./utils/financialUnits";
+import { signOutSupabaseAuth } from "./services/supabaseService";
+import { useSupabaseData } from "./context/SupabaseContext";
 import Login from "./components/Login";
 import TreasurerEntry from "./components/TreasurerEntry";
 import AdminPanel from "./components/AdminPanel";
@@ -35,9 +37,31 @@ import {
   ArrowDownRight,
   Building2,
   Landmark,
+  Loader2,
 } from "lucide-react";
 
 export default function App() {
+  const {
+    loading: supabaseLoading,
+    error: supabaseError,
+    currentUser: authUser,
+    setCurrentUser: setAuthUser,
+    members: dbMembers,
+    income: dbIncome,
+    expenses: dbExpenses,
+    fds: dbFDs,
+    assets: dbAssets,
+    loans: dbLoans,
+    chapters: dbChapters,
+    createMember: createSupabaseMember,
+    createIncome: createSupabaseIncome,
+    createExpense: createSupabaseExpense,
+    createFD: createSupabaseFD,
+    createAsset: createSupabaseAsset,
+    createLoan: createSupabaseLoan,
+    logout: logoutSupabase,
+  } = useSupabaseData();
+
   // Database States
   const [db, setDb] = useState<{
     users: User[];
@@ -50,7 +74,207 @@ export default function App() {
   } | null>(null);
 
   // Active authenticated user
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(authUser);
+
+  useEffect(() => {
+    if (authUser && !currentUser) {
+      setCurrentUser(authUser);
+    }
+  }, [authUser]);
+
+  // Merge live Supabase records into DB state
+  useEffect(() => {
+    const mappedTransactions: Transaction[] = [];
+
+    dbIncome.forEach((item) => {
+      mappedTransactions.push({
+        id: `tx_inc_${item.slNo || (item as any).id || Date.now()}`,
+        date: item.date,
+        type: HeadType.Income,
+        headId: item.accountsHead,
+        headName: item.accountsHead,
+        amount: item.paidAmount,
+        paidAmount: item.paidAmount,
+        offeredAmount: item.offeredAmount,
+        balanceAmount: item.balanceAmount,
+        voucherNumber: item.voucherNumber,
+        paymentMode: (item.paymentMode as any) || "Bank",
+        collectedBy: item.collectedBy,
+        paidBy: item.collectedFrom,
+        chapterId: item.chapterIdNo,
+        chapterIdInput: item.chapterIdNo,
+        chapterNameInput: item.chapterName,
+        financialUnitId: item.chapterIdNo,
+        description: item.remarksComments,
+        remarks: item.remarksComments,
+        createdBy: item.collectedBy,
+        createdAt: item.date,
+        slNo: item.slNo,
+      });
+    });
+
+    dbExpenses.forEach((item) => {
+      mappedTransactions.push({
+        id: `tx_exp_${item.slNo || (item as any).id || Date.now()}`,
+        date: item.date,
+        type: HeadType.Expense,
+        headId: item.accountsHead,
+        headName: item.accountsHead,
+        amount: item.paidAmount,
+        payableAmount: item.payableAmount,
+        paidAmount: item.paidAmount,
+        balanceAmount: item.balanceAmount,
+        voucherNumber: item.voucherNumber,
+        paymentMode: (item.modeOfPayment as any) || "Cash",
+        paidByExpense: item.paidBy,
+        paidTo: item.paidTo,
+        chapterId: item.chapterIdNumber,
+        chapterIdInput: item.chapterIdNumber,
+        chapterNameInput: item.chapterName,
+        financialUnitId: item.chapterIdNumber,
+        description: item.remarksComments,
+        remarks: item.remarksComments,
+        createdBy: item.paidBy,
+        createdAt: item.date,
+        slNo: item.slNo,
+      });
+    });
+
+    dbLoans.forEach((item) => {
+      mappedTransactions.push({
+        id: `tx_loan_${item.slNo || (item as any).id || Date.now()}`,
+        date: item.date,
+        type: HeadType.Loan,
+        headId: "loan_advances",
+        headName: "Loans & Advances",
+        amount: item.amount,
+        amountReturned: (item.amount || 0) - (item.loanBalance || 0),
+        loanBalance: item.loanBalance,
+        loanReturnDate: item.loanReturnDate,
+        loanReturnedDate: item.loanReturnedDate,
+        voucherNumber: item.voucherNumber,
+        repaymentPaymentMode: (item.modeOfPayment as any) || "Bank",
+        paymentMode: (item.modeOfPayment as any) || "Bank",
+        paidToCategory: (item.paidTo || "").toLowerCase().includes("member") ? "member" : "chapter",
+        paidToId: item.paidToId,
+        paidToName: item.paidTo,
+        paidTo: item.paidTo,
+        particulars: item.particulars,
+        chapterId: item.chapterIdNo,
+        chapterIdInput: item.chapterIdNo,
+        chapterNameInput: item.chapterName,
+        financialUnitId: item.chapterIdNo,
+        description: item.remarksComments,
+        remarks: item.remarksComments,
+        createdBy: item.paidTo,
+        createdAt: item.date,
+        slNo: item.slNo,
+      });
+    });
+
+    const mappedAssets: Asset[] = dbAssets.map((item) => ({
+      id: `ast_${item.slNo || item.assetNumberAssetId || Date.now()}`,
+      slNo: item.slNo || 1,
+      date: item.date,
+      chapterIdInput: item.chapterIdNo,
+      chapterNameInput: item.chapterName,
+      financialUnitId: item.chapterIdNo,
+      assetId: item.assetNumberAssetId,
+      assetName: item.assetName,
+      purchaseDate: item.assetPurchaseDate,
+      quantity: 1,
+      assetValue: item.assetValueInr,
+      totalValue: item.assetValueInr,
+      paymentMode: "Bank",
+      category: item.assetCategory,
+      assetLife: item.assetLife,
+      custodianName: item.custodianName,
+      depreciationAmount: item.depreciationAmount,
+      netAmount: item.netAmount,
+      remarks: item.remarks,
+    }));
+
+    const mappedFDs: BankBalance[] = dbFDs.map((item) => ({
+      id: `fd_${item.slNo || item.chapterIdNo || Date.now()}`,
+      slNo: item.slNo || 1,
+      date: item.date,
+      chapterIdInput: item.chapterIdNo,
+      chapterNameInput: item.chapterName,
+      financialUnitId: item.chapterIdNo,
+      amountType: "FD",
+      amount: item.amount,
+      maturityDate: item.fdMaturityDate,
+      bankName: item.bankName,
+      bankBranch: item.bankBranch,
+      bankAccountNumber: item.bankAccountNumber,
+      bankAddress: item.bankBranchAddress,
+      bankContactNumber: item.bankContactNumber,
+      remarks: item.remarksComments,
+    }));
+
+    const mappedChapters: ChapterMaster[] = dbChapters.map((item) => ({
+      id: item.chapterId,
+      slNo: item.slNo || 1,
+      chapterName: item.chapterName,
+      entityType: "Local Chapter",
+      state: item.state,
+      district: item.district,
+      chapterAddress: item.chapterAddress,
+      presidentId: item.chapterPresidentIdNo || "",
+      presidentName: item.chapterPresidentName || "",
+      vpId: item.chapterVpIdNo || "",
+      vpName: item.chapterVpName || "",
+      secretaryId: item.chapterGenSecretaryIdNo || "",
+      secretaryName: item.chapterGenSecretaryName || "",
+      treasurerId: item.chapterTreasurerIdNo || "",
+      treasurerName: item.chapterTreasurerName || "",
+      contactNo: item.chapterContactNo || "",
+      whatsappNo: item.chapterContactNo || "",
+      officeNo: item.chapterContactNo || "",
+      email: "",
+      formationDate: "2024-01-01",
+    }));
+
+    const mappedMembers: Member[] = dbMembers.map((item) => ({
+      id: item.memberIdNo,
+      slNo: item.slNo || 1,
+      memberId: item.memberIdNo,
+      memberName: item.memberName,
+      chapterIdInput: item.chapterIdNo,
+      chapterNameInput: item.chapterName,
+      qualification: item.qualificationsList && item.qualificationsList.length > 0
+        ? item.qualificationsList.map((q) => q.degree).join(", ")
+        : item.qualification,
+      qualificationsList: item.qualificationsList,
+      membershipType: (item.membershipType as any) || "General",
+      membershipDate: item.membershipDate || "2024-01-01",
+      membershipStatus: (item.membershipStatus as any) || "Active",
+      mobileNumber: item.mobileNo || "",
+      whatsappNumber: item.whatsappNo || item.mobileNo || "",
+      email: item.emailAddress || "",
+      clinicNumber: item.contactNumberLandline || "",
+      gender: item.gender,
+      dob: item.dob,
+      bloodGroup: item.bloodGroup,
+      specialization: item.specialization,
+      clinicAddress: item.clinicAddress,
+      residentialAddress: item.residentialAddress,
+      associationRole: item.designation,
+    }));
+
+    setDb((prev) => {
+      const base = prev || loadDatabase();
+      return {
+        users: base.users,
+        accountHeads: base.accountHeads,
+        transactions: mappedTransactions.length > 0 ? mappedTransactions : base.transactions,
+        assets: mappedAssets.length > 0 ? mappedAssets : base.assets,
+        bankBalances: mappedFDs.length > 0 ? mappedFDs : base.bankBalances,
+        chapterDirectory: mappedChapters.length > 0 ? mappedChapters : base.chapterDirectory,
+        members: mappedMembers.length > 0 ? mappedMembers : base.members,
+      };
+    });
+  }, [dbIncome, dbExpenses, dbLoans, dbFDs, dbAssets, dbChapters, dbMembers]);
 
   // Parse state from URL hash or path parameters
   const parseStateFromUrl = () => {
@@ -110,11 +334,11 @@ export default function App() {
     section?: "summary" | "detailed" | "specific" | null,
     replace = false
   ) => {
-    const targetTab = tab || activeReportTab;
-    const targetSection = section !== undefined ? section : (view === "reports" ? activeReportSection : null);
+    const targetTab = tab || (view === "reports" ? activeReportTab : "payments");
+    const targetSection = section !== undefined ? section : (view === "reports" && section === null ? null : (view === "reports" && tab ? activeReportSection : null));
 
     setCurrentView(view);
-    if (tab) setActiveReportTab(tab);
+    if (tab) setActiveReportTab(targetTab);
     if (view === "reports") setActiveReportSection(targetSection);
 
     let targetReportWizard = showReportWizard;
@@ -135,13 +359,15 @@ export default function App() {
 
     let newHash = `#/${view}`;
     if (view === "reports") {
-      let query = `view=reports&tab=${targetTab}`;
-      if (targetSection) query += `&section=${targetSection}`;
-      if (targetReportWizard) query += `&wizard=true`;
-      newHash = `#/${view}?${query}`;
+      const params = new URLSearchParams();
+      if (targetSection) params.set("section", targetSection);
+      if (targetReportWizard) params.set("wizard", "true");
+      if (targetTab && targetTab !== "payments") params.set("tab", targetTab);
+      const q = params.toString();
+      newHash = q ? `#/reports?${q}` : `#/reports`;
     } else if (view === "home") {
       if (targetHomeWizard) {
-        newHash = `#/${view}?wizard=${targetHomeWizard}`;
+        newHash = `#/home?wizard=${targetHomeWizard}`;
       }
     }
 
@@ -204,7 +430,12 @@ export default function App() {
     navigateTo("home", undefined, null, true);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await signOutSupabaseAuth();
+    } catch (err) {
+      console.warn("Supabase sign out error:", err);
+    }
     setCurrentUser(null);
     setEditingTransaction(null);
     navigateTo("login", undefined, null, true);
@@ -243,6 +474,56 @@ export default function App() {
 
     const updatedTxs = [fullTx, ...db.transactions];
     syncDatabase({ ...db, transactions: updatedTxs });
+
+    // Sync to Supabase in background
+    if (newTx.type === HeadType.Income) {
+      createSupabaseIncome({
+        chapterIdNo: resolveChapterCode(financialUnitId),
+        chapterName: getFinancialUnitName(financialUnitId),
+        date: newTx.date,
+        voucherNumber: newTx.voucherNumber,
+        collectedBy: currentUser.name || currentUser.username,
+        collectedFrom: newTx.paidBy || "",
+        accountsHead: selectedHead ? selectedHead.name : (newTx.headName || "General"),
+        offeredAmount: newTx.offeredAmount || newTx.amount,
+        paidAmount: newTx.paidAmount || newTx.amount,
+        balanceAmount: newTx.balanceAmount || 0,
+        paymentMode: newTx.paymentMode || "Bank",
+        remarksComments: newTx.description || newTx.remarks || "",
+      }).catch((err) => console.warn("Supabase Income sync error:", err));
+    } else if (newTx.type === HeadType.Expense) {
+      createSupabaseExpense({
+        chapterIdNumber: resolveChapterCode(financialUnitId),
+        chapterName: getFinancialUnitName(financialUnitId),
+        date: newTx.date,
+        voucherNumber: newTx.voucherNumber,
+        paidBy: newTx.paidByExpense || currentUser.name || currentUser.username,
+        paidTo: newTx.paidTo || "",
+        accountsHead: selectedHead ? selectedHead.name : (newTx.headName || "General"),
+        payableAmount: newTx.payableAmount || newTx.amount,
+        paidAmount: newTx.paidAmount || newTx.amount,
+        balanceAmount: newTx.balanceAmount || 0,
+        modeOfPayment: newTx.paymentMode || "Cash",
+        remarksComments: newTx.description || newTx.remarks || "",
+      }).catch((err) => console.warn("Supabase Expense sync error:", err));
+    } else if (newTx.type === HeadType.Loan) {
+      createSupabaseLoan({
+        chapterIdNo: resolveChapterCode(financialUnitId),
+        chapterName: getFinancialUnitName(financialUnitId),
+        date: newTx.date,
+        voucherNumber: newTx.voucherNumber,
+        paidTo: newTx.paidTo || newTx.paidToName || ((newTx.paidToCategory || "member") === "member" ? "Member" : "Chapter"),
+        paidToId: newTx.paidToId || "",
+        particulars: newTx.particulars || newTx.description || "Loan Advance",
+        amount: newTx.amount,
+        transactionType: "Loan Issue",
+        loanBalance: newTx.loanBalance ?? newTx.amount,
+        loanReturnDate: newTx.loanReturnDate || "",
+        loanReturnedDate: newTx.loanReturnedDate || "",
+        modeOfPayment: newTx.repaymentPaymentMode || newTx.paymentMode || "Bank",
+        remarksComments: newTx.description || newTx.remarks || "",
+      }).catch((err) => console.warn("Supabase Loan sync error:", err));
+    }
   };
 
   // 2. Update Transaction (Edit Mode)
@@ -289,6 +570,30 @@ export default function App() {
     const formattedName = ensureDoctorPrefix(newMember.memberName);
     const fullMember: Member = { ...newMember, memberName: formattedName, id, slNo };
     syncDatabase({ ...db, members: [fullMember, ...db.members] });
+
+    // Sync to Supabase in background
+    createSupabaseMember({
+      memberIdNo: newMember.memberId || `MEM-${Date.now()}`,
+      memberName: formattedName,
+      chapterIdNo: newMember.chapterIdInput || "",
+      chapterName: newMember.chapterNameInput || "",
+      qualification: newMember.qualification || "",
+      qualificationsList: newMember.qualificationsList || [],
+      membershipType: newMember.membershipType || "General",
+      membershipDate: newMember.membershipDate || new Date().toISOString().slice(0, 10),
+      membershipStatus: newMember.membershipStatus || "Active",
+      mobileNo: newMember.mobileNumber || "",
+      whatsappNo: newMember.whatsappNumber || "",
+      emailAddress: newMember.email || "",
+      contactNumberLandline: newMember.clinicNumber || "",
+      gender: newMember.gender,
+      dob: newMember.dob,
+      bloodGroup: newMember.bloodGroup,
+      specialization: newMember.specialization,
+      clinicAddress: newMember.clinicAddress,
+      residentialAddress: newMember.residentialAddress,
+      designation: newMember.associationRole,
+    }).catch((err) => console.warn("Supabase Member sync error:", err));
   };
 
   // 5.2 Add Asset
@@ -332,6 +637,23 @@ export default function App() {
       assets: [fullAsset, ...db.assets],
       transactions: [expenseTx, ...db.transactions],
     });
+
+    // Sync to Supabase in background
+    createSupabaseAsset({
+      date: newAsset.date,
+      chapterIdNo: resolveChapterCode(financialUnitId),
+      chapterName: getFinancialUnitName(financialUnitId),
+      assetNumberAssetId: newAsset.assetId,
+      assetName: newAsset.assetName,
+      assetPurchaseDate: newAsset.purchaseDate,
+      assetValueInr: newAsset.totalValue || newAsset.assetValue,
+      assetCategory: newAsset.category || "Equipment",
+      assetLife: newAsset.assetLife || "5 Years",
+      custodianName: newAsset.custodianName || currentUser.name,
+      depreciationAmount: newAsset.depreciationAmount || 0,
+      netAmount: newAsset.netAmount || newAsset.totalValue,
+      remarks: newAsset.remarks || "",
+    }).catch((err) => console.warn("Supabase Asset sync error:", err));
   };
 
   // 5.3 Add FD Record
@@ -352,6 +674,21 @@ export default function App() {
       ...db,
       bankBalances: [fullBalance, ...db.bankBalances],
     });
+
+    // Sync to Supabase in background
+    createSupabaseFD({
+      chapterIdNo: resolveChapterCode(financialUnitId),
+      chapterName: getFinancialUnitName(financialUnitId),
+      date: newBalance.date,
+      bankName: newBalance.bankName || "",
+      bankBranch: newBalance.bankBranch || "",
+      bankAccountNumber: newBalance.bankAccountNumber || "",
+      bankBranchAddress: newBalance.bankAddress || "",
+      bankContactNumber: newBalance.bankContactNumber || "",
+      amount: newBalance.amount,
+      fdMaturityDate: newBalance.maturityDate || "",
+      remarksComments: newBalance.remarks || "",
+    }).catch((err) => console.warn("Supabase FD sync error:", err));
   };
 
   // 6. Reset Database to Default Demo State
@@ -439,6 +776,11 @@ export default function App() {
               <h1 className="font-display font-semibold text-base sm:text-xl text-slate-900 tracking-tight leading-none">
                 IHMA FinApp
               </h1>
+              {supabaseLoading && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-blue-600 font-bold mt-0.5 animate-pulse">
+                  <Loader2 className="h-2.5 w-2.5 animate-spin" /> Syncing data...
+                </span>
+              )}
             </div>
           </div>
 
@@ -458,7 +800,7 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => navigateTo("reports")}
+              onClick={() => navigateTo("reports", "payments", false, null)}
               id="nav-reports-tab"
               className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 currentView === "reports"
@@ -729,6 +1071,7 @@ export default function App() {
               bankBalances={db.bankBalances}
               chapterDirectory={db.chapterDirectory}
               members={db.members}
+              loading={supabaseLoading}
               onDeleteTransaction={handleDeleteTransaction}
               onEditTransaction={(tx) => {
                 setEditingTransaction(tx);
