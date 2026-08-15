@@ -146,31 +146,34 @@ export default function TreasurerEntry({
   }, [activeWizard]);
 
   const DEGREE_OPTIONS = [
-    "BHMS",
-    "MD (Homeo)",
-    "DHMS",
-    "MD (General)",
-    "MS",
-    "PhD",
-    "Fellowship",
-    "MPH (Public Health)",
-    "MBA (Hospital Mgmt)",
     "B.Sc",
+    "BHMS",
+    "DHMS",
+    "Fellowship",
+    "MBA (Hospital Mgmt)",
+    "MD (General)",
+    "MD (Homeo)",
+    "MPH (Public Health)",
     "M.Sc",
-    "Others (specify)"
+    "MS",
+    "Others (specify)",
+    "PhD",
   ];
 
   const MEDICAL_COUNCIL_OPTIONS = [
-    "Travancore-Cochin Medical Council (TCMC)",
-    "State Council of Homoeopathy, Kerala",
-    "Tamil Nadu Board of Homoeopathy",
+    "Central Council of Homoeopathy (CCH)",
+    "Delhi Homoeopathic Medical Council",
     "Karnataka Board of Homoeopathic System of Medicine",
     "Maharashtra Council of Homoeopathy",
-    "Delhi Homoeopathic Medical Council",
     "National Medical Commission (NMC)",
-    "Central Council of Homoeopathy (CCH)",
     "Other Medical Council",
+    "State Council of Homoeopathy, Kerala",
+    "Tamil Nadu Board of Homoeopathy",
+    "Travancore-Cochin Medical Council (TCMC)",
   ];
+
+  const currentYear = new Date().getFullYear();
+  const YEAR_OF_PASSING_OPTIONS = Array.from({ length: 51 }, (_, i) => String(currentYear - i));
 
   const INDIAN_STATES = [
     "Andaman and Nicobar Islands",
@@ -661,15 +664,19 @@ export default function TreasurerEntry({
     }
     if (sId === "amount_details") return formData.loanAmount > 0 && !!formData.targetReturnDate;
 
-    if (sId === "member_basic") return !!formData.memberName?.trim();
+    if (sId === "member_basic") return !!formData.memberName?.trim() && !!formData.gender && !!formData.bloodGroup && !!formData.dob;
     if (sId === "member_qualifications") {
       const hasList = Array.isArray(formData.qualificationsList) && formData.qualificationsList.length > 0;
       const hasQuals = Array.isArray(formData.qualifications) && formData.qualifications.length > 0;
       const hasQualStr = !!formData.qualification?.trim();
-      return hasList || hasQuals || hasQualStr;
+      const hasTempDegree = !!formData.tempDegree;
+      return hasList || hasQuals || hasQualStr || hasTempDegree;
     }
     if (sId === "member_practice") return true;
-    if (sId === "member_contact") return !!formData.mobileNumber?.trim();
+    if (sId === "member_contact") {
+      const digits = (formData.mobileNumber || "").replace(/\D/g, "");
+      return digits.length === 10;
+    }
 
     if (sId === "asset_name") return !!formData.assetName?.trim();
     if (sId === "asset_purchase_date") return !!formData.purchaseDate;
@@ -810,7 +817,20 @@ export default function TreasurerEntry({
         onAddTransaction(payload);
       }
     } else if (activeWizard === "member" && onAddMember) {
-      const qualList: MemberQualification[] = formData.qualificationsList || [];
+      let qualList: MemberQualification[] = formData.qualificationsList || [];
+      if (qualList.length === 0 && formData.tempDegree) {
+        qualList = [{
+          degree: formData.tempDegree,
+          degreeTitle: formData.tempDegreeTitle?.trim() || undefined,
+          institution: formData.tempInstitution?.trim() || undefined,
+          university: formData.tempUniversity?.trim() || undefined,
+          yearOfPassing: formData.tempYearOfPassing?.trim() || undefined,
+          medicalCouncilName: formData.tempMedicalCouncilName || undefined,
+          medicalCouncilState: formData.tempMedicalCouncilState || undefined,
+          registrationNumber: formData.tempRegistrationNumber?.trim() || undefined,
+        }];
+      }
+
       let qualSummary = "";
       if (qualList.length > 0) {
         qualSummary = qualList
@@ -937,12 +957,14 @@ export default function TreasurerEntry({
     { key: "others", label: "Others", sub: "Unclassified or custom expense category", icon: "📎" },
   ];
 
-  // Filter members for picker
-  const filteredMembers = membersList.filter(
-    (m) =>
-      m.memberName.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
-      m.memberId.toLowerCase().includes(memberSearchTerm.toLowerCase())
-  );
+  // Filter members for picker in alphabetical order
+  const filteredMembers = [...membersList]
+    .filter(
+      (m) =>
+        m.memberName.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
+        m.memberId.toLowerCase().includes(memberSearchTerm.toLowerCase())
+    )
+    .sort((a, b) => a.memberName.localeCompare(b.memberName));
 
   // Filter chapters for loan picker (own chapter can never borrow from itself)
   const filteredChapters = chapterDirectory.filter(
@@ -1828,117 +1850,119 @@ export default function TreasurerEntry({
                         </div>
 
                         <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-                          {/* 1. Logged in Treasurer */}
-                          <div
-                            onClick={() =>
-                              setFormData({
-                                ...formData,
-                                collectedBy: currentUser.name,
-                                collectedById: "TREASURER",
-                              })
-                            }
-                            className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                              formData.collectedBy === currentUser.name
-                                ? "border-[#0F6E5D] bg-[#E4F1EE]"
-                                : "border-slate-200 hover:border-slate-300 bg-white"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-teal-100 text-teal-800 font-bold flex items-center justify-center text-xs">
-                                🔑
-                              </div>
-                              <div>
-                                <h4 className="font-bold text-xs text-slate-900">{currentUser.name} (Treasurer)</h4>
-                                <p className="text-[10px] text-slate-500">Logged in chapter treasurer</p>
-                              </div>
-                            </div>
+                          {/* Guest / Non-registered Option (Top when no search, bottom when searching) */}
+                          {!memberSearchTerm && (
                             <div
-                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                formData.collectedBy === currentUser.name
-                                  ? "border-[#0F6E5D] bg-[#0F6E5D] text-white"
-                                  : "border-slate-300 bg-white"
+                              onClick={() =>
+                                setFormData({
+                                  ...formData,
+                                  collectedBy: formData.collectedById === "GUEST" ? formData.collectedBy : "",
+                                  collectedById: "GUEST",
+                                })
+                              }
+                              className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                                formData.collectedById === "GUEST"
+                                  ? "border-[#0F6E5D] bg-[#E4F1EE]"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
                               }`}
                             >
-                              {formData.collectedBy === currentUser.name && <Check className="h-3 w-3" />}
-                            </div>
-                          </div>
-
-                          {/* 2. Registered Members (excluding current treasurer to prevent duplicate) */}
-                          {filteredMembers
-                            .filter((m) => m.memberName !== currentUser.name)
-                            .map((m) => (
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs">
+                                  👤
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-xs text-slate-900">Guest or Non-Registered Collector</h4>
+                                  <p className="text-[10px] text-slate-500">Non-member collector</p>
+                                </div>
+                              </div>
                               <div
-                                key={m.memberId}
-                                onClick={() =>
-                                  setFormData({
-                                    ...formData,
-                                    collectedBy: m.memberName,
-                                    collectedById: m.memberId,
-                                  })
-                                }
-                                className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                                  formData.collectedBy === m.memberName
-                                    ? "border-[#0F6E5D] bg-[#E4F1EE]"
-                                    : "border-slate-200 hover:border-slate-300 bg-white"
+                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                                  formData.collectedById === "GUEST"
+                                    ? "border-[#0F6E5D] bg-[#0F6E5D] text-white"
+                                    : "border-slate-300 bg-white"
                                 }`}
                               >
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-teal-50 text-teal-700 font-bold flex items-center justify-center text-xs">
-                                    🩺
-                                  </div>
-                                  <div>
-                                    <h4 className="font-bold text-xs text-slate-900">{m.memberName}</h4>
-                                    <p className="text-[10px] text-slate-500 font-mono">
-                                      {m.memberId} • {m.qualification}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div
-                                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                    formData.collectedBy === m.memberName
-                                      ? "border-[#0F6E5D] bg-[#0F6E5D] text-white"
-                                      : "border-slate-300 bg-white"
-                                  }`}
-                                >
-                                  {formData.collectedBy === m.memberName && <Check className="h-3 w-3" />}
-                                </div>
-                              </div>
-                            ))}
-
-                          {/* 3. Guest / Non-registered Option */}
-                          <div
-                            onClick={() =>
-                              setFormData({
-                                ...formData,
-                                collectedBy: formData.collectedById === "GUEST" ? formData.collectedBy : "",
-                                collectedById: "GUEST",
-                              })
-                            }
-                            className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                              formData.collectedById === "GUEST"
-                                ? "border-[#0F6E5D] bg-[#E4F1EE]"
-                                : "border-slate-200 hover:border-slate-300 bg-white"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs">
-                                👤
-                              </div>
-                              <div>
-                                <h4 className="font-bold text-xs text-slate-900">Guest or Non-Registered Collector</h4>
-                                <p className="text-[10px] text-slate-500">Non-member collector</p>
+                                {formData.collectedById === "GUEST" && <Check className="h-3 w-3" />}
                               </div>
                             </div>
+                          )}
+
+                          {/* Registered Members in Alphabetical Order */}
+                          {filteredMembers.map((m) => (
                             <div
-                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                formData.collectedById === "GUEST"
-                                  ? "border-[#0F6E5D] bg-[#0F6E5D] text-white"
-                                  : "border-slate-300 bg-white"
+                              key={m.memberId}
+                              onClick={() =>
+                                setFormData({
+                                  ...formData,
+                                  collectedBy: m.memberName,
+                                  collectedById: m.memberId,
+                                })
+                              }
+                              className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                                formData.collectedBy === m.memberName
+                                  ? "border-[#0F6E5D] bg-[#E4F1EE]"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
                               }`}
                             >
-                              {formData.collectedById === "GUEST" && <Check className="h-3 w-3" />}
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-teal-50 text-teal-700 font-bold flex items-center justify-center text-xs">
+                                  🩺
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-xs text-slate-900">{m.memberName}</h4>
+                                  <p className="text-[10px] text-slate-500 font-mono">
+                                    {m.memberId} • {m.qualification}
+                                  </p>
+                                </div>
+                              </div>
+                              <div
+                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                                  formData.collectedBy === m.memberName
+                                    ? "border-[#0F6E5D] bg-[#0F6E5D] text-white"
+                                    : "border-slate-300 bg-white"
+                                }`}
+                              >
+                                {formData.collectedBy === m.memberName && <Check className="h-3 w-3" />}
+                              </div>
                             </div>
-                          </div>
+                          ))}
+
+                          {/* Guest / Non-registered Option (Bottom when searching) */}
+                          {memberSearchTerm && (
+                            <div
+                              onClick={() =>
+                                setFormData({
+                                  ...formData,
+                                  collectedBy: formData.collectedById === "GUEST" ? formData.collectedBy : "",
+                                  collectedById: "GUEST",
+                                })
+                              }
+                              className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                                formData.collectedById === "GUEST"
+                                  ? "border-[#0F6E5D] bg-[#E4F1EE]"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs">
+                                  👤
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-xs text-slate-900">Guest or Non-Registered Collector</h4>
+                                  <p className="text-[10px] text-slate-500">Non-member collector</p>
+                                </div>
+                              </div>
+                              <div
+                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                                  formData.collectedById === "GUEST"
+                                    ? "border-[#0F6E5D] bg-[#0F6E5D] text-white"
+                                    : "border-slate-300 bg-white"
+                                }`}
+                              >
+                                {formData.collectedById === "GUEST" && <Check className="h-3 w-3" />}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         {/* Guest input when guest option selected */}
@@ -1978,6 +2002,43 @@ export default function TreasurerEntry({
                         </div>
 
                         <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                          {/* Guest / Non-registered Payer option (Top when no search, bottom when searching) */}
+                          {!memberSearchTerm && (
+                            <div
+                              onClick={() =>
+                                setFormData({
+                                  ...formData,
+                                  paidBy: formData.paidByMemberId === "GUEST" ? formData.paidBy : "",
+                                  paidByMemberId: "GUEST",
+                                })
+                              }
+                              className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                                formData.paidByMemberId === "GUEST"
+                                  ? "border-[#0F6E5D] bg-[#E4F1EE]"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 font-bold flex items-center justify-center text-xs">
+                                  ➕
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-xs text-slate-900">Guest or Non-Registered Payer</h4>
+                                  <p className="text-[10px] text-slate-500">Not stored with IHMA Member ID</p>
+                                </div>
+                              </div>
+                              <div
+                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                                  formData.paidByMemberId === "GUEST"
+                                    ? "border-[#0F6E5D] bg-[#0F6E5D] text-white"
+                                    : "border-slate-300 bg-white"
+                                }`}
+                              >
+                                {formData.paidByMemberId === "GUEST" && <Check className="h-3 w-3" />}
+                              </div>
+                            </div>
+                          )}
+
                           {filteredMembers.map((m) => (
                             <div
                               key={m.memberId}
@@ -2017,40 +2078,42 @@ export default function TreasurerEntry({
                             </div>
                           ))}
 
-                          {/* Guest / Non-registered Payer option */}
-                          <div
-                            onClick={() =>
-                              setFormData({
-                                ...formData,
-                                paidBy: formData.paidByMemberId === "GUEST" ? formData.paidBy : "",
-                                paidByMemberId: "GUEST",
-                              })
-                            }
-                            className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                              formData.paidByMemberId === "GUEST"
-                                ? "border-[#0F6E5D] bg-[#E4F1EE]"
-                                : "border-slate-200 hover:border-slate-300 bg-white"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 font-bold flex items-center justify-center text-xs">
-                                ➕
-                              </div>
-                              <div>
-                                <h4 className="font-bold text-xs text-slate-900">Guest or Non-Registered Payer</h4>
-                                <p className="text-[10px] text-slate-500">Not stored with IHMA Member ID</p>
-                              </div>
-                            </div>
+                          {/* Guest / Non-registered Payer option (Bottom when searching) */}
+                          {memberSearchTerm && (
                             <div
-                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                              onClick={() =>
+                                setFormData({
+                                  ...formData,
+                                  paidBy: formData.paidByMemberId === "GUEST" ? formData.paidBy : "",
+                                  paidByMemberId: "GUEST",
+                                })
+                              }
+                              className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                                 formData.paidByMemberId === "GUEST"
-                                  ? "border-[#0F6E5D] bg-[#0F6E5D] text-white"
-                                  : "border-slate-300 bg-white"
+                                  ? "border-[#0F6E5D] bg-[#E4F1EE]"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
                               }`}
                             >
-                              {formData.paidByMemberId === "GUEST" && <Check className="h-3 w-3" />}
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 font-bold flex items-center justify-center text-xs">
+                                  ➕
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-xs text-slate-900">Guest or Non-Registered Payer</h4>
+                                  <p className="text-[10px] text-slate-500">Not stored with IHMA Member ID</p>
+                                </div>
+                              </div>
+                              <div
+                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                                  formData.paidByMemberId === "GUEST"
+                                    ? "border-[#0F6E5D] bg-[#0F6E5D] text-white"
+                                    : "border-slate-300 bg-white"
+                                }`}
+                              >
+                                {formData.paidByMemberId === "GUEST" && <Check className="h-3 w-3" />}
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </div>
 
                         {formData.paidByMemberId === "GUEST" && (
@@ -2454,117 +2517,119 @@ export default function TreasurerEntry({
                         </div>
 
                         <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-                          {/* Current Treasurer Quick Card */}
-                          <div
-                            onClick={() =>
-                              setFormData({
-                                ...formData,
-                                paidBy: currentUser.name,
-                                paidByMemberId: "TREASURER",
-                              })
-                            }
-                            className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                              formData.paidBy === currentUser.name
-                                ? "border-amber-600 bg-amber-50"
-                                : "border-slate-200 hover:border-slate-300 bg-white"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-800 font-bold flex items-center justify-center text-xs">
-                                🔑
-                              </div>
-                              <div>
-                                <h4 className="font-bold text-xs text-slate-900">{currentUser.name} (Treasurer)</h4>
-                                <p className="text-[10px] text-slate-500">Logged in chapter treasurer</p>
-                              </div>
-                            </div>
+                          {/* Guest / Custom Payer option (Top when no search, bottom when searching) */}
+                          {!memberSearchTerm && (
                             <div
-                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                formData.paidBy === currentUser.name
-                                  ? "border-amber-600 bg-amber-600 text-white"
-                                  : "border-slate-300 bg-white"
+                              onClick={() =>
+                                setFormData({
+                                  ...formData,
+                                  paidBy: formData.paidByMemberId === "GUEST" ? formData.paidBy : "",
+                                  paidByMemberId: "GUEST",
+                                })
+                              }
+                              className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                                formData.paidByMemberId === "GUEST"
+                                  ? "border-amber-600 bg-amber-50"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
                               }`}
                             >
-                              {formData.paidBy === currentUser.name && <Check className="h-3 w-3" />}
-                            </div>
-                          </div>
-
-                          {/* Registered members excluding current treasurer */}
-                          {filteredMembers
-                            .filter((m) => m.memberName !== currentUser.name)
-                            .map((m) => (
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs">
+                                  👤
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-xs text-slate-900">Guest or Non-Registered Payer</h4>
+                                  <p className="text-[10px] text-slate-500">Non-member payer</p>
+                                </div>
+                              </div>
                               <div
-                                key={m.memberId}
-                                onClick={() =>
-                                  setFormData({
-                                    ...formData,
-                                    paidBy: m.memberName,
-                                    paidByMemberId: m.memberId,
-                                  })
-                                }
-                                className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                                  formData.paidBy === m.memberName
-                                    ? "border-amber-600 bg-amber-50"
-                                    : "border-slate-200 hover:border-slate-300 bg-white"
+                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                                  formData.paidByMemberId === "GUEST"
+                                    ? "border-amber-600 bg-amber-600 text-white"
+                                    : "border-slate-300 bg-white"
                                 }`}
                               >
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-800 font-bold flex items-center justify-center text-xs">
-                                    🩺
-                                  </div>
-                                  <div>
-                                    <h4 className="font-bold text-xs text-slate-900">{m.memberName}</h4>
-                                    <p className="text-[10px] text-slate-500 font-mono">
-                                      {m.memberId} • {m.qualification}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div
-                                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                    formData.paidBy === m.memberName
-                                      ? "border-amber-600 bg-amber-600 text-white"
-                                      : "border-slate-300 bg-white"
-                                  }`}
-                                >
-                                  {formData.paidBy === m.memberName && <Check className="h-3 w-3" />}
-                                </div>
-                              </div>
-                            ))}
-
-                          {/* Guest / Custom Payer option */}
-                          <div
-                            onClick={() =>
-                              setFormData({
-                                ...formData,
-                                paidBy: formData.paidByMemberId === "GUEST" ? formData.paidBy : "",
-                                paidByMemberId: "GUEST",
-                              })
-                            }
-                            className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                              formData.paidByMemberId === "GUEST"
-                                ? "border-amber-600 bg-amber-50"
-                                : "border-slate-200 hover:border-slate-300 bg-white"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs">
-                                👤
-                              </div>
-                              <div>
-                                <h4 className="font-bold text-xs text-slate-900">Guest or Non-Registered Payer</h4>
-                                <p className="text-[10px] text-slate-500">Non-member payer</p>
+                                {formData.paidByMemberId === "GUEST" && <Check className="h-3 w-3" />}
                               </div>
                             </div>
+                          )}
+
+                          {/* Registered members in alphabetical order */}
+                          {filteredMembers.map((m) => (
                             <div
-                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                formData.paidByMemberId === "GUEST"
-                                  ? "border-amber-600 bg-amber-600 text-white"
-                                  : "border-slate-300 bg-white"
+                              key={m.memberId}
+                              onClick={() =>
+                                setFormData({
+                                  ...formData,
+                                  paidBy: m.memberName,
+                                  paidByMemberId: m.memberId,
+                                })
+                              }
+                              className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                                formData.paidBy === m.memberName
+                                  ? "border-amber-600 bg-amber-50"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
                               }`}
                             >
-                              {formData.paidByMemberId === "GUEST" && <Check className="h-3 w-3" />}
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-800 font-bold flex items-center justify-center text-xs">
+                                  🩺
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-xs text-slate-900">{m.memberName}</h4>
+                                  <p className="text-[10px] text-slate-500 font-mono">
+                                    {m.memberId} • {m.qualification}
+                                  </p>
+                                </div>
+                              </div>
+                              <div
+                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                                  formData.paidBy === m.memberName
+                                    ? "border-amber-600 bg-amber-600 text-white"
+                                    : "border-slate-300 bg-white"
+                                }`}
+                              >
+                                {formData.paidBy === m.memberName && <Check className="h-3 w-3" />}
+                              </div>
                             </div>
-                          </div>
+                          ))}
+
+                          {/* Guest / Custom Payer option (Bottom when searching) */}
+                          {memberSearchTerm && (
+                            <div
+                              onClick={() =>
+                                setFormData({
+                                  ...formData,
+                                  paidBy: formData.paidByMemberId === "GUEST" ? formData.paidBy : "",
+                                  paidByMemberId: "GUEST",
+                                })
+                              }
+                              className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                                formData.paidByMemberId === "GUEST"
+                                  ? "border-amber-600 bg-amber-50"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs">
+                                  👤
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-xs text-slate-900">Guest or Non-Registered Payer</h4>
+                                  <p className="text-[10px] text-slate-500">Non-member payer</p>
+                                </div>
+                              </div>
+                              <div
+                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                                  formData.paidByMemberId === "GUEST"
+                                    ? "border-amber-600 bg-amber-600 text-white"
+                                    : "border-slate-300 bg-white"
+                                }`}
+                              >
+                                {formData.paidByMemberId === "GUEST" && <Check className="h-3 w-3" />}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         {formData.paidByMemberId === "GUEST" && (
@@ -3256,27 +3321,26 @@ export default function TreasurerEntry({
                       <div className="space-y-5">
                         <div>
                           <label className="block text-xs font-bold text-slate-800 mb-1.5 uppercase tracking-wider">
-                            Full Name of Doctor / Member *
+                            Full Name *
                           </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Suresh Nair"
-                            value={formData.memberName || "Dr. "}
-                            onChange={(e) => {
-                              let v = e.target.value;
-                              if (!v.startsWith("Dr. ")) {
-                                v = "Dr. " + v.replace(/^Dr\.?\s*/i, "");
-                              }
-                              setFormData({ ...formData, memberName: v });
-                            }}
-                            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-semibold text-slate-900 shadow-2xs"
-                          />
+                          <div className="flex items-stretch rounded-xl border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-teal-500 shadow-2xs">
+                            <span className="px-3.5 flex items-center bg-slate-100 border-r border-slate-300 text-xs font-mono font-bold text-slate-600">
+                              Dr.
+                            </span>
+                            <input
+                              type="text"
+                              placeholder="Suresh Nair"
+                              value={formData.memberName || ""}
+                              onChange={(e) => setFormData({ ...formData, memberName: e.target.value })}
+                              className="flex-1 px-3.5 py-3 text-sm font-semibold text-slate-900 bg-transparent focus:outline-none"
+                            />
+                          </div>
                         </div>
 
                         {/* Gender Selection */}
                         <div>
                           <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
-                            Gender
+                            Gender *
                           </label>
                           <div className="grid grid-cols-3 gap-2.5">
                             {[
@@ -3303,7 +3367,7 @@ export default function TreasurerEntry({
                         {/* Blood Group Selection */}
                         <div>
                           <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
-                            Blood Group
+                            Blood Group *
                           </label>
                           <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
                             {["O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-"].map((bg) => (
@@ -3326,7 +3390,7 @@ export default function TreasurerEntry({
                         {/* Date of Birth */}
                         <div>
                           <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-                            Date of Birth
+                            Date of Birth *
                           </label>
                           <input
                             type="date"
@@ -3410,20 +3474,18 @@ export default function TreasurerEntry({
                               <label className="block text-[11px] font-bold text-slate-700 mb-1">
                                 Year of Passing
                               </label>
-                              <input
-                                type="number"
-                                min="1950"
-                                max={new Date().getFullYear()}
-                                placeholder="e.g. 1998"
+                              <select
                                 value={formData.tempYearOfPassing || ""}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  const currentYear = new Date().getFullYear();
-                                  if (val && Number(val) > currentYear) return;
-                                  setFormData({ ...formData, tempYearOfPassing: val });
-                                }}
+                                onChange={(e) => setFormData({ ...formData, tempYearOfPassing: e.target.value })}
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white font-mono"
-                              />
+                              >
+                                <option value="">-- Select Year --</option>
+                                {YEAR_OF_PASSING_OPTIONS.map((year) => (
+                                  <option key={year} value={year}>
+                                    {year}
+                                  </option>
+                                ))}
+                              </select>
                             </div>
 
                             <div>
@@ -3468,39 +3530,77 @@ export default function TreasurerEntry({
                             </div>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!formData.tempDegree) return;
-                              const newQual: MemberQualification = {
-                                degree: formData.tempDegree,
-                                degreeTitle: formData.tempDegreeTitle?.trim() || undefined,
-                                institution: formData.tempInstitution?.trim() || undefined,
-                                university: formData.tempUniversity?.trim() || undefined,
-                                yearOfPassing: formData.tempYearOfPassing?.trim() || undefined,
-                                medicalCouncilName: formData.tempMedicalCouncilName || undefined,
-                                medicalCouncilState: formData.tempMedicalCouncilState || undefined,
-                                registrationNumber: formData.tempRegistrationNumber?.trim() || undefined,
-                              };
-                              const currentList = formData.qualificationsList || [];
-                              setFormData({
-                                ...formData,
-                                qualificationsList: [...currentList, newQual],
-                                tempDegree: "",
-                                tempDegreeTitle: "",
-                                tempInstitution: "",
-                                tempUniversity: "",
-                                tempYearOfPassing: "",
-                                tempMedicalCouncilName: "",
-                                tempMedicalCouncilState: "",
-                                tempRegistrationNumber: "",
-                              });
-                            }}
-                            className="w-full py-2.5 bg-teal-800 text-white font-bold text-xs rounded-lg shadow-2xs hover:bg-teal-900 transition-colors cursor-pointer flex items-center justify-center gap-2 mt-2"
-                          >
-                            <Plus className="h-4 w-4" />
-                            <span>Add This Qualification to Profile</span>
-                          </button>
+                          {(!formData.qualificationsList || formData.qualificationsList.length === 0) ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!formData.tempDegree) return;
+                                const newQual: MemberQualification = {
+                                  degree: formData.tempDegree,
+                                  degreeTitle: formData.tempDegreeTitle?.trim() || undefined,
+                                  institution: formData.tempInstitution?.trim() || undefined,
+                                  university: formData.tempUniversity?.trim() || undefined,
+                                  yearOfPassing: formData.tempYearOfPassing?.trim() || undefined,
+                                  medicalCouncilName: formData.tempMedicalCouncilName || undefined,
+                                  medicalCouncilState: formData.tempMedicalCouncilState || undefined,
+                                  registrationNumber: formData.tempRegistrationNumber?.trim() || undefined,
+                                };
+                                const currentList = formData.qualificationsList || [];
+                                setFormData({
+                                  ...formData,
+                                  qualificationsList: [...currentList, newQual],
+                                  tempDegree: "",
+                                  tempDegreeTitle: "",
+                                  tempInstitution: "",
+                                  tempUniversity: "",
+                                  tempYearOfPassing: "",
+                                  tempMedicalCouncilName: "",
+                                  tempMedicalCouncilState: "",
+                                  tempRegistrationNumber: "",
+                                });
+                              }}
+                              disabled={!formData.tempDegree}
+                              className="w-full py-2.5 bg-[#0F6E5D] text-white font-bold text-xs rounded-lg shadow-2xs hover:bg-[#0B5548] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer flex items-center justify-center gap-2 mt-2"
+                            >
+                              <Plus className="h-4 w-4" />
+                              <span>Add More Qualifications</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!formData.tempDegree) return;
+                                const newQual: MemberQualification = {
+                                  degree: formData.tempDegree,
+                                  degreeTitle: formData.tempDegreeTitle?.trim() || undefined,
+                                  institution: formData.tempInstitution?.trim() || undefined,
+                                  university: formData.tempUniversity?.trim() || undefined,
+                                  yearOfPassing: formData.tempYearOfPassing?.trim() || undefined,
+                                  medicalCouncilName: formData.tempMedicalCouncilName || undefined,
+                                  medicalCouncilState: formData.tempMedicalCouncilState || undefined,
+                                  registrationNumber: formData.tempRegistrationNumber?.trim() || undefined,
+                                };
+                                const currentList = formData.qualificationsList || [];
+                                setFormData({
+                                  ...formData,
+                                  qualificationsList: [...currentList, newQual],
+                                  tempDegree: "",
+                                  tempDegreeTitle: "",
+                                  tempInstitution: "",
+                                  tempUniversity: "",
+                                  tempYearOfPassing: "",
+                                  tempMedicalCouncilName: "",
+                                  tempMedicalCouncilState: "",
+                                  tempRegistrationNumber: "",
+                                });
+                              }}
+                              disabled={!formData.tempDegree}
+                              className="w-full py-2.5 bg-[#0F6E5D] text-white font-bold text-xs rounded-lg shadow-2xs hover:bg-[#0B5548] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer flex items-center justify-center gap-2 mt-2"
+                            >
+                              <Plus className="h-4 w-4" />
+                              <span>Add This Qualification to Profile</span>
+                            </button>
+                          )}
                         </div>
 
                         {/* Added Qualifications List DOWN BELOW */}
@@ -3634,9 +3734,11 @@ export default function TreasurerEntry({
                           >
                             <option value="">Select role</option>
                             <option value="President">President</option>
+                            <option value="Vice President">Vice President</option>
                             <option value="Secretary">Secretary</option>
-                            <option value="Treasurer">Treasurer</option>
                             <option value="General Secretary">General Secretary</option>
+                            <option value="Treasurer">Treasurer</option>
+                            <option value="Member">Member</option>
                           </select>
                         </div>
                       </div>
@@ -3647,13 +3749,18 @@ export default function TreasurerEntry({
                       <div className="space-y-4">
                         <div>
                           <label className="block text-xs font-bold text-slate-800 mb-1 uppercase tracking-wider">
-                            Mobile Phone Number *
+                            Mobile Phone Number (10 digits) *
                           </label>
                           <input
                             type="text"
-                            placeholder="+91 9876543210"
+                            inputMode="numeric"
+                            maxLength={10}
+                            placeholder="9876543210"
                             value={formData.mobileNumber || ""}
-                            onChange={(e) => setFormData({ ...formData, mobileNumber: e.target.value })}
+                            onChange={(e) => {
+                              const cleaned = e.target.value.replace(/\D/g, "").slice(0, 10);
+                              setFormData({ ...formData, mobileNumber: cleaned });
+                            }}
                             className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-bold text-slate-900"
                           />
                         </div>
@@ -3849,7 +3956,7 @@ export default function TreasurerEntry({
 
                         <div className="bg-teal-50 p-3 rounded-lg border border-teal-200 text-xs text-teal-900 flex items-center gap-2">
                           <CheckCircle2 className="h-4 w-4 shrink-0 text-teal-700" />
-                          <span>Member profile will be registered under chapter <strong>{formData.chapterName || defaultChapterName}</strong>.</span>
+                          <span>Member profile will be registered under <strong>{formData.chapterName || defaultChapterName}</strong>.</span>
                         </div>
                       </div>
                     )}

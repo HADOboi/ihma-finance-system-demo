@@ -2468,13 +2468,10 @@ export default function Dashboard({
       {/* SPECIFIC REPORT WIZARD OVERLAY MODAL */}
       {showReportWizard && (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 p-3 sm:p-6"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-white p-3 sm:p-6"
           role="dialog"
           aria-modal="true"
           aria-label="Specific report builder"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) handleCloseReportWizard();
-          }}
         >
           <div className="w-full max-w-6xl my-3 sm:my-8">
             <ReportWizard
