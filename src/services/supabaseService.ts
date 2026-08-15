@@ -1112,45 +1112,71 @@ export function determineUserRoleFromMember(
   const chapterId = (member as any)?.chapter_id_no || (member as any)?.chapter_id || (member as MemberModel)?.chapterIdNo || "";
   const combinedContext = `${membershipType} ${cleanIdentifier} ${memberName}`.toLowerCase();
 
+  // Helper to determine org level and nodeId
+  let level = OrgLevel.Local;
+  let nodeId: string | undefined = chapterId || undefined;
+
+  if (combinedContext.includes("national") || cleanIdentifier.includes("national_") || cleanIdentifier.includes("nat_")) {
+    level = OrgLevel.National;
+    nodeId = undefined;
+  } else if (combinedContext.includes("kerala") || cleanIdentifier.includes("kerala_")) {
+    level = OrgLevel.State;
+    nodeId = "kerala";
+  } else if (
+    combinedContext.includes("district") ||
+    cleanIdentifier.includes("ekm_") ||
+    cleanIdentifier.includes("ernakulam") ||
+    cleanIdentifier.includes("_district") ||
+    chapterId.toLowerCase().includes("ek")
+  ) {
+    level = OrgLevel.District;
+    if (cleanIdentifier.includes("ekm_") || cleanIdentifier.includes("ernakulam") || chapterId.toLowerCase().includes("ek")) {
+      nodeId = "ernakulam";
+    } else {
+      nodeId = "ernakulam";
+    }
+  }
+
   // 2. Treasurer Check (Read/Write permissions)
-  if (combinedContext.includes("treasurer") || cleanIdentifier.includes("treasurer")) {
-    const isNational = chapterId.toLowerCase().includes("nat") || combinedContext.includes("national");
+  if (combinedContext.includes("treasurer") || cleanIdentifier.includes("treasurer") || cleanIdentifier.includes("_treas")) {
+    const designation = level === OrgLevel.National ? "National Treasurer" : level === OrgLevel.State ? "State Treasurer" : level === OrgLevel.District ? "District Treasurer" : "Chapter Treasurer";
     return {
       role: UserRole.Treasurer,
-      level: isNational ? OrgLevel.National : OrgLevel.Local,
-      designation: isNational ? "National Treasurer" : "Chapter Treasurer",
-      nodeId: chapterId || "cochin",
+      level,
+      designation,
+      nodeId: nodeId || (level === OrgLevel.Local ? "cochin" : "ernakulam"),
     };
   }
 
   // 3. President Check (Read-Only)
   if (combinedContext.includes("president") || cleanIdentifier.includes("pres")) {
-    const isNational = chapterId.toLowerCase().includes("nat") || combinedContext.includes("national");
+    const designation = level === OrgLevel.National ? "National President" : level === OrgLevel.State ? "State President" : level === OrgLevel.District ? "District President" : "Chapter President";
     return {
       role: UserRole.President,
-      level: isNational ? OrgLevel.National : OrgLevel.Local,
-      designation: isNational ? "National President" : "Chapter President",
-      nodeId: chapterId || "cochin",
+      level,
+      designation,
+      nodeId: nodeId || (level === OrgLevel.Local ? "cochin" : "ernakulam"),
     };
   }
 
   // 4. Secretary / General Secretary Check (Read-Only)
   if (combinedContext.includes("secretary") || cleanIdentifier.includes("sec")) {
     const isGenSec = combinedContext.includes("gen") || cleanIdentifier.includes("gen");
+    const designation = isGenSec ? "General Secretary" : level === OrgLevel.State ? "State Secretary" : level === OrgLevel.District ? "District Secretary" : "Chapter Secretary";
     return {
       role: isGenSec ? UserRole.GeneralSecretary : UserRole.Secretary,
-      level: isGenSec ? OrgLevel.National : OrgLevel.Local,
-      designation: isGenSec ? "General Secretary" : "Chapter Secretary",
-      nodeId: chapterId || "cochin",
+      level,
+      designation,
+      nodeId: nodeId || (level === OrgLevel.Local ? "cochin" : "ernakulam"),
     };
   }
 
   // 5. Default General User / Member (Read-Only)
   return {
     role: UserRole.GeneralUser,
-    level: OrgLevel.Local,
+    level,
     designation: membershipType || "IHMA Member",
-    nodeId: chapterId || undefined,
+    nodeId: nodeId || (level === OrgLevel.Local ? "cochin" : "ernakulam"),
   };
 }
 

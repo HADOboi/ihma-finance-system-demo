@@ -59,20 +59,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           return;
         }
 
-        // Fallback check if credentials match initial demo set when server is empty
-        const lowerUser = trimmedUsername.toLowerCase();
-        const demoUser = USERS.find(
-          (u) => u.username === lowerUser && u.password === password
-        );
-
-        if (demoUser) {
-          onLoginSuccess(demoUser);
-          return;
-        }
-
         setError(result.error || "Invalid username or password. Please check your credentials.");
       } else {
-        // Local Demo fallback when .env keys are not yet provided
+        // Fallback when Supabase env vars are not configured
         const lowerUser = trimmedUsername.toLowerCase();
         const foundUser = USERS.find(
           (u) => u.username === lowerUser && u.password === password
@@ -80,22 +69,19 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
         if (foundUser) {
           onLoginSuccess(foundUser);
+        } else if (password === "pass" || password === "admin" || password === "123456") {
+          const dynamicRole = determineUserRoleFromMember(null, lowerUser);
+          const dynamicUser: User = {
+            username: lowerUser,
+            name: lowerUser.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+            role: dynamicRole.role,
+            level: dynamicRole.level,
+            nodeId: dynamicRole.nodeId || "ernakulam",
+            designation: dynamicRole.designation,
+          };
+          onLoginSuccess(dynamicUser);
         } else {
-          // Dynamic user construction if password matches demo pattern
-          if (password === "pass" || password === "admin" || password === "123456") {
-            const dynamicRole = determineUserRoleFromMember(null, lowerUser);
-            const dynamicUser: User = {
-              username: lowerUser,
-              name: lowerUser.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-              role: dynamicRole.role,
-              level: dynamicRole.level,
-              nodeId: dynamicRole.nodeId || "cochin",
-              designation: dynamicRole.designation,
-            };
-            onLoginSuccess(dynamicUser);
-          } else {
-            setError("Invalid username or password.");
-          }
+          setError("Invalid username or password.");
         }
       }
     } catch (err: any) {
