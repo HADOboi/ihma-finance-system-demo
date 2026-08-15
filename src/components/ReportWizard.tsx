@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import {
   User,
   AccountHead,
@@ -14,8 +14,8 @@ import {
   BankBalance,
   Member,
 } from "../types";
-import { CHAPTERS, DISTRICTS } from "../mockData";
-import { FINANCIAL_UNITS, getReadableFinancialUnitIds, getUserFinancialUnitId } from "../utils/financialUnits";
+import { CHAPTERS, DISTRICTS, STATES } from "../mockData";
+import { FINANCIAL_UNITS, getReadableFinancialUnitIds, getUserFinancialUnitId, getFinancialUnitName } from "../utils/financialUnits";
 import { formatDateDMY, formatINR } from "../utils/formatters";
 import {
   ArrowLeft,
@@ -25,12 +25,112 @@ import {
   Building2,
   Calendar,
   Check,
+  ChevronDown,
   ChevronRight,
   FileSpreadsheet,
   FileText,
   Landmark,
   Users,
 } from "lucide-react";
+
+type GeoFilterKey = "states" | "districts" | "chapters";
+
+interface GeoOption {
+  id: string;
+  name: string;
+  hint?: string;
+}
+
+function MultiSelectFilter({
+  label,
+  options,
+  selectedIds,
+  isOpen,
+  onToggleOpen,
+  onToggleOption,
+  onSelectAll,
+  onClear,
+  emptyHint,
+  idPrefix,
+  wrapperId,
+}: {
+  label: string;
+  options: GeoOption[];
+  selectedIds: string[];
+  isOpen: boolean;
+  onToggleOpen: () => void;
+  onToggleOption: (id: string) => void;
+  onSelectAll: () => void;
+  onClear: () => void;
+  emptyHint: string;
+  idPrefix: string;
+  wrapperId: string;
+}) {
+  const isEmpty = options.length === 0;
+  const chosen = options.filter((o) => selectedIds.includes(o.id));
+
+  let summary: string;
+  if (isEmpty) summary = emptyHint;
+  else if (chosen.length === 0) summary = `None selected (${options.length} available)`;
+  else if (chosen.length === options.length) summary = `All ${label.toLowerCase()} (${options.length})`;
+  else if (chosen.length <= 2) summary = chosen.map((o) => o.name).join(", ");
+  else summary = `${chosen.length} of ${options.length} selected`;
+
+  return (
+    <div className="relative" id={wrapperId}>
+      <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">{label}</span>
+      <button
+        type="button"
+        disabled={isEmpty}
+        onClick={onToggleOpen}
+        id={`${idPrefix}-dropdown-button`}
+        aria-expanded={isOpen}
+        className={`w-full flex items-center justify-between gap-2 px-3 py-2 bg-white border rounded-xl text-xs font-bold shadow-2xs transition-colors ${
+          isEmpty
+            ? "border-slate-200 text-slate-400 cursor-not-allowed"
+            : "border-slate-300 text-slate-700 hover:border-blue-400 cursor-pointer"
+        }`}
+      >
+        <span className="truncate text-left">{summary}</span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {isOpen && !isEmpty && (
+        <div className="absolute left-0 right-0 z-30 mt-1.5 bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 bg-slate-50/70">
+            <button type="button" onClick={onSelectAll} className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer">
+              Select all
+            </button>
+            <button type="button" onClick={onClear} className="text-[10px] font-bold text-slate-500 hover:underline cursor-pointer">
+              Clear
+            </button>
+          </div>
+          <div className="max-h-56 overflow-y-auto p-1.5 space-y-0.5">
+            {options.map((o) => {
+              const checked = selectedIds.includes(o.id);
+              return (
+                <label
+                  key={o.id}
+                  id={`${idPrefix}-${o.id}`}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => onToggleOption(o.id)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="truncate">{o.name}</span>
+                  {o.hint && <span className="text-[9px] text-slate-400 ml-auto shrink-0">{o.hint}</span>}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export type ReportSection = "income" | "expense" | "loans" | "assets" | "fd" | "members";
 
@@ -86,9 +186,115 @@ export default function ReportWizard({
   const [currentStep, setCurrentStep] = useState<number>(0);
   const userFinancialUnitId = getUserFinancialUnitId(currentUser);
   const readableFinancialUnitIds = useMemo(() => getReadableFinancialUnitIds(currentUser), [currentUser]);
-  const [selectedFinancialUnitIds, setSelectedFinancialUnitIds] = useState<string[]>(
-    currentUser.level === OrgLevel.Local ? [userFinancialUnitId] : []
+
+  const [selectedStates, setSelectedStates] = useState<string[]>([]);
+  const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
+  const [selectedChapters, setSelectedChapters] = useState<string[]>(
+    currentUser.level === OrgLevel.Local ? [currentUser.nodeId || ""] : []
   );
+  const [includeOwnFinancialUnit, setIncludeOwnFinancialUnit] = useState<boolean>(true);
+
+  const [openGeoFilter, setOpenGeoFilter] = useState<GeoFilterKey | null>(null);
+  const geoFilterRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!openGeoFilter) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (geoFilterRef.current && !geoFilterRef.current.contains(e.target as Node)) {
+        setOpenGeoFilter(null);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [openGeoFilter]);
+
+  const toggleGeoFilter = (key: GeoFilterKey) => {
+    setOpenGeoFilter((current) => (current === key ? null : key));
+  };
+
+  const combinedChapters = CHAPTERS;
+  const combinedDistricts = DISTRICTS;
+
+  const availableDistricts = useMemo(() => {
+    if (currentUser.level === OrgLevel.National) {
+      const stateScope = selectedStates.length > 0 ? selectedStates : STATES.map((s) => s.id);
+      return combinedDistricts.filter((d) => stateScope.includes(d.stateId));
+    }
+    if (currentUser.level === OrgLevel.State) {
+      const userState = (currentUser.nodeId || "").toLowerCase();
+      return combinedDistricts.filter((d) => {
+        const dState = (d.stateId || "").toLowerCase();
+        return dState === userState || (userState.includes("kerala") && dState.includes("kerala")) || d.stateId === currentUser.nodeId;
+      });
+    }
+    return [];
+  }, [selectedStates, currentUser, combinedDistricts]);
+
+  const availableChapters = useMemo(() => {
+    if (currentUser.level === OrgLevel.National || currentUser.level === OrgLevel.State) {
+      const districtScope = selectedDistricts.length > 0 ? selectedDistricts : availableDistricts.map((d) => d.id);
+      return combinedChapters.filter((c) => districtScope.includes(c.districtId));
+    }
+    if (currentUser.level === OrgLevel.District) {
+      const userDist = currentUser.nodeId?.toLowerCase().trim() || "";
+      const userDistClean = userDist.replace(/\s+/g, "_");
+      return combinedChapters.filter((c) => {
+        const dId = (c.districtId || "").toLowerCase().trim();
+        return dId === userDist || dId === userDistClean || dId.replace(/_/g, " ") === userDist.replace(/_/g, " ");
+      });
+    }
+    return [];
+  }, [selectedDistricts, currentUser, availableDistricts, combinedChapters]);
+
+  const selectedFinancialUnitIds = useMemo(() => {
+    if (currentUser.level === OrgLevel.Local) return [userFinancialUnitId];
+    const stateUnits = selectedStates;
+    const districtUnits = selectedDistricts;
+    const localUnits = selectedChapters;
+    const ownUnit = includeOwnFinancialUnit ? [userFinancialUnitId] : [];
+    return [...new Set([...ownUnit, ...stateUnits, ...districtUnits, ...localUnits])]
+      .filter((id) => readableFinancialUnitIds.includes(id));
+  }, [currentUser.level, userFinancialUnitId, includeOwnFinancialUnit, selectedStates, selectedDistricts, selectedChapters, readableFinancialUnitIds]);
+
+  const handleStateToggle = (stateId: string) => {
+    const updated = selectedStates.includes(stateId)
+      ? selectedStates.filter((id) => id !== stateId)
+      : [...selectedStates, stateId];
+    setSelectedStates(updated);
+
+    const stillValidDists = combinedDistricts.filter(
+      (d) => updated.includes(d.stateId) && selectedDistricts.includes(d.id)
+    ).map((d) => d.id);
+    setSelectedDistricts(stillValidDists);
+    setSelectedChapters((prev) =>
+      prev.filter((chapId) => {
+        const chap = combinedChapters.find((c) => c.id === chapId);
+        return chap ? stillValidDists.includes(chap.districtId) : false;
+      })
+    );
+  };
+
+  const handleDistrictToggle = (distId: string) => {
+    const updated = selectedDistricts.includes(distId)
+      ? selectedDistricts.filter((id) => id !== distId)
+      : [...selectedDistricts, distId];
+    setSelectedDistricts(updated);
+
+    setSelectedChapters((prev) =>
+      prev.filter((chapId) => {
+        const chap = combinedChapters.find((c) => c.id === chapId);
+        return chap ? updated.includes(chap.districtId) : false;
+      })
+    );
+  };
+
+  const handleChapterToggle = (chapId: string) => {
+    if (selectedChapters.includes(chapId)) {
+      setSelectedChapters(selectedChapters.filter((id) => id !== chapId));
+    } else {
+      setSelectedChapters([...selectedChapters, chapId]);
+    }
+  };
 
   // Step 1 — period
   const [periodType, setPeriodType] = useState<WizardPeriod | null>(null);
@@ -113,7 +319,7 @@ export default function ReportWizard({
 
   const steps = useMemo(() => {
     const list = [
-      ...(currentUser.level === OrgLevel.Local ? [] : [{ id: "units", title: "Which chapters?", sub: "Select exactly the chapters to include. Parents and descendants are never added automatically." }]),
+      { id: "units", title: "Select Chapter / Entity Scope", sub: "Choose the states, districts, local chapters or own entity to include in this report." },
       { id: "period", title: "Report Period", sub: "Pick the time span this report should cover." },
       { id: "sections", title: "What should the report contain?", sub: "Choose one, or select several to combine them." },
     ];
@@ -126,7 +332,7 @@ export default function ReportWizard({
     }
     list.push({ id: "result", title: "Your report", sub: "Review the result, then export it." });
     return list;
-  }, [needsHeadStep, currentUser.level]);
+  }, [needsHeadStep]);
 
   const currentStepConfig = steps[Math.min(currentStep, steps.length - 1)];
 
@@ -356,7 +562,7 @@ export default function ReportWizard({
 
   // --- Step gating ---
   const isStepValid = () => {
-    if (currentStepConfig.id === "units") return true; // selecting none is valid and yields an empty report
+    if (currentStepConfig.id === "units") return currentUser.level === OrgLevel.Local || selectedFinancialUnitIds.length > 0;
     if (currentStepConfig.id === "period") return dateWindow !== null;
     if (currentStepConfig.id === "sections") return sections.length > 0;
     return true; // heads step is optional; result step has no Next
@@ -526,29 +732,97 @@ export default function ReportWizard({
 
       {/* Step Content */}
       <div className="p-4 sm:p-6 space-y-4">
-        {/* ---------------- STEP: FINANCIAL UNITS ---------------- */}
+        {/* ---------------- STEP: FINANCIAL UNITS / GEOGRAPHICAL FILTER ---------------- */}
         {currentStepConfig.id === "units" && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {FINANCIAL_UNITS.filter((unit) => readableFinancialUnitIds.includes(unit.id)).map((unit) => {
-                const active = selectedFinancialUnitIds.includes(unit.id);
-                return (
-                  <button
-                    key={unit.id}
-                    type="button"
-                    onClick={() => setSelectedFinancialUnitIds((current) => active ? current.filter((id) => id !== unit.id) : [...current, unit.id])}
-                    className={`p-3.5 rounded-xl border-2 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${active ? "border-[#0F6E5D] bg-teal-50 shadow-xs" : "border-slate-200 bg-white hover:border-slate-300"}`}
-                  >
-                    <span>
-                      <span className={`text-sm font-bold block ${active ? "text-teal-900" : "text-slate-800"}`}>{unit.name}</span>
-                      <span className="text-[10px] text-slate-500 block mt-0.5">{unit.level} chapter</span>
-                    </span>
-                    {active && <Check className="h-4 w-4 text-[#0F6E5D] shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-[11px] text-slate-500">Selections are exact. Selecting a parent never adds its children, and selecting a child never adds its parent. If you select none, the report will include no chapters.</p>
+          <div className="space-y-4">
+            {currentUser.level !== OrgLevel.Local ? (
+              <div className="space-y-4">
+                <button
+                  type="button"
+                  onClick={() => setIncludeOwnFinancialUnit((selected) => !selected)}
+                  className={`w-full flex items-center justify-between gap-3 px-3.5 py-3 rounded-xl border text-left text-xs font-bold cursor-pointer transition-colors ${
+                    includeOwnFinancialUnit ? "bg-teal-50 border-teal-300 text-teal-900" : "bg-white border-slate-300 text-slate-700 hover:border-teal-300"
+                  }`}
+                >
+                  <span>Include {getFinancialUnitName(userFinancialUnitId)}</span>
+                  <span className={`h-5 w-5 rounded-md border flex items-center justify-center transition-colors ${includeOwnFinancialUnit ? "bg-[#0F6E5D] border-[#0F6E5D] text-white" : "border-slate-300"}`}>
+                    {includeOwnFinancialUnit && <Check className="h-3.5 w-3.5" />}
+                  </span>
+                </button>
+
+                <div ref={geoFilterRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1 border-t border-slate-100">
+                  {/* National Level View: Select States */}
+                  {currentUser.level === OrgLevel.National && (
+                    <MultiSelectFilter
+                      label="States"
+                      wrapperId="wizard-state-selector-wrapper"
+                      idPrefix="wizard-state-filter"
+                      options={STATES.map((s) => ({ id: s.id, name: s.name }))}
+                      selectedIds={selectedStates}
+                      isOpen={openGeoFilter === "states"}
+                      onToggleOpen={() => toggleGeoFilter("states")}
+                      onToggleOption={handleStateToggle}
+                      onSelectAll={() => setSelectedStates(STATES.map((s) => s.id))}
+                      onClear={() => {
+                        setSelectedStates([]);
+                        setSelectedDistricts([]);
+                        setSelectedChapters([]);
+                      }}
+                      emptyHint="No states available"
+                    />
+                  )}
+
+                  {/* National & State View: Select Districts */}
+                  {(currentUser.level === OrgLevel.National || currentUser.level === OrgLevel.State) && (
+                    <MultiSelectFilter
+                      label="Districts"
+                      wrapperId="wizard-district-selector-wrapper"
+                      idPrefix="wizard-district-filter"
+                      options={availableDistricts.map((d) => ({ id: d.id, name: d.name }))}
+                      selectedIds={selectedDistricts}
+                      isOpen={openGeoFilter === "districts"}
+                      onToggleOpen={() => toggleGeoFilter("districts")}
+                      onToggleOption={handleDistrictToggle}
+                      onSelectAll={() => setSelectedDistricts(availableDistricts.map((d) => d.id))}
+                      onClear={() => {
+                        setSelectedDistricts([]);
+                        setSelectedChapters([]);
+                      }}
+                      emptyHint="Select a state first"
+                    />
+                  )}
+
+                  {/* Select Chapters (Visible on National, State, and District levels) */}
+                  <MultiSelectFilter
+                    label="Local Chapters"
+                    wrapperId="wizard-chapter-selector-wrapper"
+                    idPrefix="wizard-chapter-filter"
+                    options={availableChapters.map((c) => ({
+                      id: c.id,
+                      name: c.name,
+                      hint: combinedDistricts.find((d) => d.id === c.districtId)?.name || DISTRICTS.find((d) => d.id === c.districtId)?.name || "",
+                    }))}
+                    selectedIds={selectedChapters}
+                    isOpen={openGeoFilter === "chapters"}
+                    onToggleOpen={() => toggleGeoFilter("chapters")}
+                    onToggleOption={handleChapterToggle}
+                    onSelectAll={() => setSelectedChapters(availableChapters.map((c) => c.id))}
+                    onClear={() => setSelectedChapters([])}
+                    emptyHint={currentUser.level === OrgLevel.District ? "No local chapters in this district" : "Select a district first"}
+                  />
+                </div>
+
+                {selectedFinancialUnitIds.length === 0 && (
+                  <div className="flex items-center gap-2.5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-semibold text-amber-800">
+                    Select at least one state, district, or chapter above to include in the report.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 text-xs font-semibold text-teal-900">
+                Logged in as Local Chapter user ({getFinancialUnitName(userFinancialUnitId)}). All data will be generated for your chapter.
+              </div>
+            )}
           </div>
         )}
 

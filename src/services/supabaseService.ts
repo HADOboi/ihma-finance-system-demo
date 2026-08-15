@@ -9,6 +9,7 @@
 
 import { supabase } from "./supabaseClient";
 import { User, UserRole, OrgLevel } from "../types";
+import { STATES, DISTRICTS, CHAPTERS, USERS } from "../mockData";
 
 /* ==========================================================================
    1. TYPES & DATABASE ROW INTERFACES (PostgreSQL snake_case Schema)
@@ -1107,50 +1108,171 @@ export function determineUserRoleFromMember(
     };
   }
 
+  // 2. Check if matches pre-defined user in USERS list
+  const preconfigured = USERS.find((u) => u.username.toLowerCase() === cleanIdentifier);
+  if (preconfigured) {
+    return {
+      role: preconfigured.role,
+      level: preconfigured.level,
+      designation: preconfigured.designation,
+      nodeId: preconfigured.nodeId,
+    };
+  }
+
   const membershipType = (member as any)?.membership_type || (member as MemberModel)?.membershipType || "";
   const memberName = (member as any)?.member_name || (member as MemberModel)?.memberName || "";
-  const chapterId = (member as any)?.chapter_id_no || (member as any)?.chapter_id || (member as MemberModel)?.chapterIdNo || "";
+  const chapterId = ((member as any)?.chapter_id_no || (member as any)?.chapter_id || (member as MemberModel)?.chapterIdNo || "").toLowerCase();
   const combinedContext = `${membershipType} ${cleanIdentifier} ${memberName}`.toLowerCase();
 
-  // 2. Treasurer Check (Read/Write permissions)
-  if (combinedContext.includes("treasurer") || cleanIdentifier.includes("treasurer")) {
-    const isNational = chapterId.toLowerCase().includes("nat") || combinedContext.includes("national");
+  // Role detection
+  let role = UserRole.GeneralUser;
+  let roleTitle = "Member";
+  if (combinedContext.includes("treasurer") || cleanIdentifier.includes("treas")) {
+    role = UserRole.Treasurer;
+    roleTitle = "Treasurer";
+  } else if (combinedContext.includes("president") || cleanIdentifier.includes("pres")) {
+    role = UserRole.President;
+    roleTitle = "President";
+  } else if (combinedContext.includes("gen_sec") || combinedContext.includes("general secretary") || cleanIdentifier.includes("gen_sec")) {
+    role = UserRole.GeneralSecretary;
+    roleTitle = "General Secretary";
+  } else if (combinedContext.includes("secretary") || cleanIdentifier.includes("sec")) {
+    role = UserRole.Secretary;
+    roleTitle = "Secretary";
+  } else if (combinedContext.includes("vp") || combinedContext.includes("vice president") || cleanIdentifier.includes("vp")) {
+    role = UserRole.VicePresident;
+    roleTitle = "Vice President";
+  }
+
+  // Level & Node ID detection
+  // A. National Level
+  const isNational =
+    chapterId === "national" ||
+    chapterId === "dl-nd-hq00" ||
+    chapterId.includes("nat") ||
+    chapterId.includes("hq") ||
+    combinedContext.includes("national") ||
+    cleanIdentifier.startsWith("national") ||
+    cleanIdentifier.includes("nat_");
+
+  if (isNational) {
     return {
-      role: UserRole.Treasurer,
-      level: isNational ? OrgLevel.National : OrgLevel.Local,
-      designation: isNational ? "National Treasurer" : "Chapter Treasurer",
-      nodeId: chapterId || "cochin",
+      role,
+      level: OrgLevel.National,
+      designation: `National ${roleTitle}`,
+      nodeId: "national",
     };
   }
 
-  // 3. President Check (Read-Only)
-  if (combinedContext.includes("president") || cleanIdentifier.includes("pres")) {
-    const isNational = chapterId.toLowerCase().includes("nat") || combinedContext.includes("national");
+  // B. State Level
+  const matchedState = STATES.find(
+    (s) =>
+      chapterId === s.id ||
+      chapterId.endsWith("-st00") ||
+      cleanIdentifier.startsWith(`${s.id}_`) ||
+      cleanIdentifier.includes(`_${s.id}`) ||
+      combinedContext.includes(s.name.toLowerCase()) ||
+      combinedContext.includes(`${s.id} state`)
+  );
+
+  const isExplicitStateContext =
+    matchedState ||
+    chapterId.endsWith("-st00") ||
+    combinedContext.includes("state") ||
+    cleanIdentifier.includes("_state_") ||
+    cleanIdentifier.endsWith("_state");
+
+  if (isExplicitStateContext && matchedState) {
     return {
-      role: UserRole.President,
-      level: isNational ? OrgLevel.National : OrgLevel.Local,
-      designation: isNational ? "National President" : "Chapter President",
-      nodeId: chapterId || "cochin",
+      role,
+      level: OrgLevel.State,
+      designation: `${matchedState.name} State ${roleTitle}`,
+      nodeId: matchedState.id,
     };
   }
 
-  // 4. Secretary / General Secretary Check (Read-Only)
-  if (combinedContext.includes("secretary") || cleanIdentifier.includes("sec")) {
-    const isGenSec = combinedContext.includes("gen") || cleanIdentifier.includes("gen");
+  // C. District Level
+  const districtAliasMap: Record<string, string> = {
+    ekm: "ernakulam",
+    ernakulam: "ernakulam",
+    kz: "kozhikode",
+    kozhikode: "kozhikode",
+    calicut: "kozhikode",
+    cn: "chennai",
+    chennai: "chennai",
+    bn: "bangalore",
+    bangalore: "bangalore",
+    pkd: "palakkad",
+    palakkad: "palakkad",
+    tvm: "trivandrum",
+    trivandrum: "trivandrum",
+    thiruvananthapuram: "trivandrum",
+    tsr: "thrissur",
+    thrissur: "thrissur",
+    ktm: "kottayam",
+    kottayam: "kottayam",
+    clt: "kozhikode",
+  };
+
+  let matchedDistrictNodeId: string | undefined = undefined;
+  let matchedDistrictName: string | undefined = undefined;
+
+  for (const dist of DISTRICTS) {
+    if (
+      chapterId === dist.id ||
+      chapterId.includes(`${dist.id}-dt00`) ||
+      cleanIdentifier.startsWith(`${dist.id}_`) ||
+      cleanIdentifier.includes(`_${dist.id}`) ||
+      combinedContext.includes(dist.name.toLowerCase())
+    ) {
+      matchedDistrictNodeId = dist.id;
+      matchedDistrictName = dist.name;
+      break;
+    }
+  }
+
+  if (!matchedDistrictNodeId) {
+    const prefix = cleanIdentifier.split("_")[0];
+    if (districtAliasMap[prefix]) {
+      const mappedId = districtAliasMap[prefix];
+      const distObj = DISTRICTS.find((d) => d.id === mappedId);
+      matchedDistrictNodeId = mappedId;
+      matchedDistrictName = distObj ? distObj.name : mappedId.charAt(0).toUpperCase() + mappedId.slice(1);
+    }
+  }
+
+  const isExplicitDistrictContext =
+    matchedDistrictNodeId ||
+    chapterId.endsWith("-dt00") ||
+    combinedContext.includes("district") ||
+    cleanIdentifier.includes("dist");
+
+  if (isExplicitDistrictContext && matchedDistrictNodeId) {
     return {
-      role: isGenSec ? UserRole.GeneralSecretary : UserRole.Secretary,
-      level: isGenSec ? OrgLevel.National : OrgLevel.Local,
-      designation: isGenSec ? "General Secretary" : "Chapter Secretary",
-      nodeId: chapterId || "cochin",
+      role,
+      level: OrgLevel.District,
+      designation: `${matchedDistrictName || matchedDistrictNodeId} District ${roleTitle}`,
+      nodeId: matchedDistrictNodeId,
     };
   }
 
-  // 5. Default General User / Member (Read-Only)
+  // D. Local Level (Default)
+  const matchedChapter = CHAPTERS.find(
+    (c) =>
+      chapterId === c.id ||
+      cleanIdentifier.startsWith(`${c.id}_`) ||
+      cleanIdentifier.includes(c.id) ||
+      combinedContext.includes(c.name.toLowerCase())
+  );
+
+  const localNodeId = matchedChapter ? matchedChapter.id : (chapterId || "cochin");
+  const localName = matchedChapter ? matchedChapter.name : "Local Chapter";
+
   return {
-    role: UserRole.GeneralUser,
+    role,
     level: OrgLevel.Local,
-    designation: membershipType || "IHMA Member",
-    nodeId: chapterId || undefined,
+    designation: `${localName} ${roleTitle}`,
+    nodeId: localNodeId,
   };
 }
 

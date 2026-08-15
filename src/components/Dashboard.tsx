@@ -448,8 +448,12 @@ export default function Dashboard({
       return combinedChapters.filter((c) => districtScope.includes(c.districtId));
     }
     if (currentUser.level === OrgLevel.District) {
-      const userDist = currentUser.nodeId?.toLowerCase() || "";
-      return combinedChapters.filter((c) => c.districtId === currentUser.nodeId || c.districtId === userDist || c.districtId === userDist.replace(/\s+/g, "_"));
+      const userDist = currentUser.nodeId?.toLowerCase().trim() || "";
+      const userDistClean = userDist.replace(/\s+/g, "_");
+      return combinedChapters.filter((c) => {
+        const dId = (c.districtId || "").toLowerCase().trim();
+        return dId === userDist || dId === userDistClean || dId.replace(/_/g, " ") === userDist.replace(/_/g, " ");
+      });
     }
     return [];
   }, [selectedDistricts, currentUser, availableDistricts, combinedChapters]);
@@ -539,6 +543,97 @@ export default function Dashboard({
 
   const selectNoneChapters = () => {
     setSelectedChapters([]);
+  };
+
+  const renderGeoFilters = () => {
+    if (currentUser.level === OrgLevel.Local) return null;
+
+    return (
+      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs mb-4" id="dashboard-filters-container">
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 gap-4">
+            <div
+              ref={geoFilterRef}
+              id="geo-filter-row"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 border-b border-slate-100 pb-4"
+            >
+              <button
+                type="button"
+                onClick={() => setIncludeOwnFinancialUnit((selected) => !selected)}
+                className={`sm:col-span-2 lg:col-span-3 flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border text-left text-xs font-bold cursor-pointer transition-colors ${
+                  includeOwnFinancialUnit ? "bg-teal-50 border-teal-300 text-teal-900" : "bg-white border-slate-300 text-slate-700 hover:border-teal-300"
+                }`}
+              >
+                <span>Include {getFinancialUnitName(userFinancialUnitId)}</span>
+                <span className={`h-5 w-5 rounded-md border flex items-center justify-center transition-colors ${includeOwnFinancialUnit ? "bg-[#0F6E5D] border-[#0F6E5D] text-white" : "border-slate-300"}`}>
+                  {includeOwnFinancialUnit && <Check className="h-3.5 w-3.5" />}
+                </span>
+              </button>
+
+              {/* National Level View: Select States */}
+              {currentUser.level === OrgLevel.National && (
+                <MultiSelectFilter
+                  label="States"
+                  wrapperId="state-selector-wrapper"
+                  idPrefix="state-filter"
+                  options={STATES.map((s) => ({ id: s.id, name: s.name }))}
+                  selectedIds={selectedStates}
+                  isOpen={openGeoFilter === "states"}
+                  onToggleOpen={() => toggleGeoFilter("states")}
+                  onToggleOption={handleStateToggle}
+                  onSelectAll={selectAllStates}
+                  onClear={selectNoneStates}
+                  emptyHint="No states available"
+                />
+              )}
+
+              {/* National & State View: Select Districts */}
+              {(currentUser.level === OrgLevel.National || currentUser.level === OrgLevel.State) && (
+                <MultiSelectFilter
+                  label="Districts"
+                  wrapperId="district-selector-wrapper"
+                  idPrefix="district-filter"
+                  options={availableDistricts.map((d) => ({ id: d.id, name: d.name }))}
+                  selectedIds={selectedDistricts}
+                  isOpen={openGeoFilter === "districts"}
+                  onToggleOpen={() => toggleGeoFilter("districts")}
+                  onToggleOption={handleDistrictToggle}
+                  onSelectAll={selectAllDistricts}
+                  onClear={selectNoneDistricts}
+                  emptyHint="Select a state first"
+                />
+              )}
+
+              {/* Select Chapters (Visible on National, State, and District levels) */}
+              <MultiSelectFilter
+                label="Local Chapters"
+                wrapperId="chapter-selector-wrapper"
+                idPrefix="chapter-filter"
+                options={availableChapters.map((c) => ({
+                  id: c.id,
+                  name: c.name,
+                  hint: combinedDistricts.find((d) => d.id === c.districtId)?.name || DISTRICTS.find((d) => d.id === c.districtId)?.name || "",
+                }))}
+                selectedIds={selectedChapters}
+                isOpen={openGeoFilter === "chapters"}
+                onToggleOpen={() => toggleGeoFilter("chapters")}
+                onToggleOption={handleChapterToggle}
+                onSelectAll={selectAllChapters}
+                onClear={selectNoneChapters}
+                emptyHint={currentUser.level === OrgLevel.District ? "No local chapters in this district" : "Select a district first"}
+              />
+            </div>
+
+            {!hasAnyGeoSelection && (
+              <div id="no-geo-selection-notice" className="flex items-center gap-2.5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-semibold text-amber-800">
+                <Info className="h-4 w-4 shrink-0" />
+                Select at least one state, district or chapter above to view data. Nothing is shown until you make a selection.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const filterTransactions = (
@@ -1099,119 +1194,35 @@ export default function Dashboard({
         </div>
       )}
 
-      {/* 1. SELECTION FILTERS PANEL (Based on User's Org Level) - Only on Reports Landing */}
+      {/* LANDING HEADER BAR */}
       {!reportSection && (
-        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs" id="dashboard-filters-container">
-          <div className={`flex flex-col gap-3 ${currentUser.level !== OrgLevel.Local ? "mb-4 border-b border-slate-100 pb-4" : ""}`}>
-            <div className="flex flex-wrap items-center gap-2">
-              {onBackToHome && (
-                <button
-                  type="button"
-                  onClick={onBackToHome}
-                  id="back-to-home-button"
-                  className="inline-flex items-center gap-2 h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 shrink-0 cursor-pointer"
-                  aria-label="Back to home"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  Back to Home
-                </button>
-              )}
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs" id="dashboard-header-container">
+          <div className="flex flex-wrap items-center gap-2">
+            {onBackToHome && (
+              <button
+                type="button"
+                onClick={onBackToHome}
+                id="back-to-home-button"
+                className="inline-flex items-center gap-2 h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 shrink-0 cursor-pointer"
+                aria-label="Back to home"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Home
+              </button>
+            )}
 
-              <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-200 text-[11px] font-bold">
-                  {scopeLabel}
-                </span>
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200 text-[11px] font-bold">
-                  {currentUser.level}
-                </span>
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-bold">
-                  {currentUser.role === "Treasurer" ? "Treasurer (R/W)" : `${currentUser.role} (RO)`}
-                </span>
-              </div>
+            <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-200 text-[11px] font-bold">
+                {scopeLabel}
+              </span>
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200 text-[11px] font-bold">
+                {currentUser.level}
+              </span>
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-bold">
+                {currentUser.role === "Treasurer" ? "Treasurer (R/W)" : `${currentUser.role} (RO)`}
+              </span>
             </div>
           </div>
-
-
-          {currentUser.level !== OrgLevel.Local && (
-            <div className="space-y-5">
-              {/* A. Geographical / Organizational selections (Cascading) */}
-              <div className="grid grid-cols-1 gap-4">
-                <div
-                  ref={geoFilterRef}
-                  id="geo-filter-row"
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 border-b border-slate-100 pb-4"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setIncludeOwnFinancialUnit((selected) => !selected)}
-                    className={`sm:col-span-2 lg:col-span-3 flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border text-left text-xs font-bold cursor-pointer ${includeOwnFinancialUnit ? "bg-teal-50 border-teal-300 text-teal-900" : "bg-white border-slate-300 text-slate-700 hover:border-teal-300"}`}
-                  >
-                    <span>Include {getFinancialUnitName(userFinancialUnitId)}</span>
-                    <span className={`h-5 w-5 rounded-md border flex items-center justify-center ${includeOwnFinancialUnit ? "bg-[#0F6E5D] border-[#0F6E5D] text-white" : "border-slate-300"}`}>{includeOwnFinancialUnit && <Check className="h-3.5 w-3.5" />}</span>
-                  </button>
-                  {/* National Level View: Select States */}
-                  {currentUser.level === OrgLevel.National && (
-                    <MultiSelectFilter
-                      label="States"
-                      wrapperId="state-selector-wrapper"
-                      idPrefix="state-filter"
-                      options={STATES.map((s) => ({ id: s.id, name: s.name }))}
-                      selectedIds={selectedStates}
-                      isOpen={openGeoFilter === "states"}
-                      onToggleOpen={() => toggleGeoFilter("states")}
-                      onToggleOption={handleStateToggle}
-                      onSelectAll={selectAllStates}
-                      onClear={selectNoneStates}
-                      emptyHint="No states available"
-                    />
-                  )}
-
-                  {/* National & State View: Select Districts */}
-                  {(currentUser.level === OrgLevel.National || currentUser.level === OrgLevel.State) && (
-                    <MultiSelectFilter
-                      label="Districts"
-                      wrapperId="district-selector-wrapper"
-                      idPrefix="district-filter"
-                      options={availableDistricts.map((d) => ({ id: d.id, name: d.name }))}
-                      selectedIds={selectedDistricts}
-                      isOpen={openGeoFilter === "districts"}
-                      onToggleOpen={() => toggleGeoFilter("districts")}
-                      onToggleOption={handleDistrictToggle}
-                      onSelectAll={selectAllDistricts}
-                      onClear={selectNoneDistricts}
-                      emptyHint="Select a state first"
-                    />
-                  )}
-
-                  {/* Select Chapters (Visible on National, State, and District levels) */}
-                  <MultiSelectFilter
-                    label="Local Chapters"
-                    wrapperId="chapter-selector-wrapper"
-                    idPrefix="chapter-filter"
-                    options={availableChapters.map((c) => ({
-                      id: c.id,
-                      name: c.name,
-                      hint: combinedDistricts.find((d) => d.id === c.districtId)?.name || DISTRICTS.find((d) => d.id === c.districtId)?.name || "",
-                    }))}
-                    selectedIds={selectedChapters}
-                    isOpen={openGeoFilter === "chapters"}
-                    onToggleOpen={() => toggleGeoFilter("chapters")}
-                    onToggleOption={handleChapterToggle}
-                    onSelectAll={selectAllChapters}
-                    onClear={selectNoneChapters}
-                    emptyHint="Select a district first"
-                  />
-                </div>
-
-              {!hasAnyGeoSelection && (
-                <div id="no-geo-selection-notice" className="flex items-center gap-2.5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-semibold text-amber-800">
-                  <Info className="h-4 w-4 shrink-0" />
-                  Select at least one state, district or chapter above to view data. Nothing is shown until you make a selection.
-                </div>
-              )}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -1318,6 +1329,8 @@ export default function Dashboard({
             </span>
           </div>
         </div>
+
+        {renderGeoFilters()}
 
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center gap-3">
           <div className="flex items-center gap-2 shrink-0"><Calendar className="h-4 w-4 text-blue-600" /><span className="text-xs font-bold text-slate-800">Summary period</span></div>
@@ -1500,6 +1513,8 @@ export default function Dashboard({
             </span>
           </div>
         </div>
+
+        {renderGeoFilters()}
 
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center gap-3">
           <div className="flex items-center gap-2 shrink-0">
