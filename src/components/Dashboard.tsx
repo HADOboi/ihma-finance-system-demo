@@ -92,6 +92,8 @@ interface DashboardProps {
   onUpdateTransaction?: (tx: Transaction) => void;
   initialReportTab?: ReportTab;
   onReportTabChange?: (tab: ReportTab) => void;
+  activeReportSection?: "summary" | "detailed" | "specific" | null;
+  onReportSectionChange?: (section: "summary" | "detailed" | "specific" | null) => void;
   showReportWizard?: boolean;
   onReportWizardChange?: (show: boolean) => void;
   onBackToHome?: () => void;
@@ -231,10 +233,29 @@ export default function Dashboard({
   onUpdateTransaction,
   initialReportTab,
   onReportTabChange,
+  activeReportSection,
+  onReportSectionChange,
   showReportWizard: externalShowReportWizard,
   onReportWizardChange,
   onBackToHome,
 }: DashboardProps) {
+  // Active Section on Reports Page ("summary" | "detailed" | "specific" | null)
+  const [reportSection, setReportSection] = useState<"summary" | "detailed" | "specific" | null>(
+    activeReportSection !== undefined ? activeReportSection : null
+  );
+
+  useEffect(() => {
+    if (activeReportSection !== undefined) {
+      setReportSection(activeReportSection);
+    }
+  }, [activeReportSection]);
+
+  const handleSelectSection = (sec: "summary" | "detailed" | "specific" | null) => {
+    setReportSection(sec);
+    if (onReportSectionChange) {
+      onReportSectionChange(sec);
+    }
+  };
   // --- Date Range / Period State ---
   const [periodType, setPeriodType] = useState<PeriodType>("year");
   
@@ -1030,15 +1051,6 @@ export default function Dashboard({
                 Back to Home
               </button>
             )}
-            <button
-              type="button"
-              id="guided-report-button-top"
-              onClick={() => handleSetShowReportWizard(true)}
-              className="inline-flex items-center gap-2 h-9 px-3.5 bg-gradient-to-r from-[#0F6E5D] to-teal-700 hover:from-[#0B5548] hover:to-teal-800 text-white rounded-xl shadow-sm cursor-pointer transition-colors shrink-0"
-            >
-              <Sparkles className="h-4 w-4 shrink-0" />
-              <span className="text-xs font-bold">Specific report</span>
-            </button>
 
             <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
               <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-200 text-[11px] font-bold">
@@ -1059,7 +1071,6 @@ export default function Dashboard({
           <div className="space-y-5">
             {/* A. Geographical / Organizational selections (Cascading) */}
             <div className="grid grid-cols-1 gap-4">
-              {currentUser.level !== OrgLevel.Local && (
               <div
                 ref={geoFilterRef}
                 id="geo-filter-row"
@@ -1126,169 +1137,112 @@ export default function Dashboard({
                   emptyHint="Select a district first"
                 />
               </div>
-            )}
 
-            {currentUser.level !== OrgLevel.Local && !hasAnyGeoSelection && (
+            {!hasAnyGeoSelection && (
               <div id="no-geo-selection-notice" className="flex items-center gap-2.5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-semibold text-amber-800">
                 <Info className="h-4 w-4 shrink-0" />
                 Select at least one state, district or chapter above to view data. Nothing is shown until you make a selection.
               </div>
             )}
-
-
-
-          </div>
-
-          {/* Date Range Selector Bar */}
-          <div className="hidden bg-[#F8FAFC] p-4 border border-slate-200/80 rounded-2xl space-y-3">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4.5 w-4.5 text-blue-600" />
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Summary Period</span>
-              </div>
-
-              {/* Range Type Buttons */}
-              <div className="flex flex-wrap bg-white border border-slate-200 rounded-xl p-1 gap-1">
-                {(["year", "month", "day", "custom"] as PeriodType[]).map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => setPeriodType(type)}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors capitalize cursor-pointer ${
-                      periodType === type
-                        ? "bg-blue-600 text-white shadow-xs"
-                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                    }`}
-                  >
-                    {type === "year"
-                      ? "Full Year"
-                      : type === "month"
-                      ? "Specific Month"
-                      : type === "day"
-                      ? "Single Day"
-                      : "Custom Range"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Sub-selectors for chosen PeriodType */}
-            <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-slate-200/50 text-xs">
-              {(periodType === "year" || periodType === "month") && (
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-600 font-semibold">Financial Year:</span>
-                  <select
-                    value={selectedYear}
-                    onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
-                    className="px-3 py-1.5 border border-slate-300 rounded-xl font-bold text-slate-900 bg-white"
-                  >
-                    <option value={2026}>2026-27</option>
-                    <option value={2025}>2025-26</option>
-                    <option value={2024}>2024-25</option>
-                  </select>
-                </div>
-              )}
-
-              {periodType === "month" && (
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-600 font-semibold">Month:</span>
-                  <select
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(parseInt(e.target.value, 10))}
-                    className="px-3 py-1.5 border border-slate-300 rounded-xl font-bold text-slate-900 bg-white"
-                  >
-                    {[
-                      "January", "February", "March", "April", "May", "June",
-                      "July", "August", "September", "October", "November", "December"
-                    ].map((m, idx) => (
-                      <option key={m} value={idx}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {periodType === "day" && (
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-600 font-semibold">Select Day:</span>
-                  <input
-                    type="date"
-                    value={selectedDay}
-                    onChange={(e) => setSelectedDay(e.target.value)}
-                    className="px-3 py-1.5 border border-slate-300 rounded-xl font-bold text-slate-900 bg-white"
-                  />
-                </div>
-              )}
-
-              {periodType === "custom" && (
-                <div className="flex flex-wrap items-center gap-3 bg-white p-2 rounded-xl border border-slate-200">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-500 font-medium">From:</span>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="px-2.5 py-1 border border-slate-300 rounded-lg font-bold text-slate-900 bg-white"
-                    />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-500 font-medium">To:</span>
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="px-2.5 py-1 border border-slate-300 rounded-lg font-bold text-slate-900 bg-white"
-                    />
-                  </div>
-                </div>
-              )}
             </div>
           </div>
-        </div>
         )}
       </div>
 
-      {/* GUIDED REPORT ENTRY POINT */}
-      <div className="hidden" aria-hidden="true">
-        {false ? (
-          <ReportWizard
-            currentUser={currentUser}
-            accountHeads={accountHeads}
-            transactions={transactions}
-            assets={assets}
-            bankBalances={bankBalances}
-            members={members}
-            scopeLabel={scopeLabel}
-            onClose={() => setShowReportWizard(false)}
-          />
-        ) : (
-          <button
-            type="button"
-            id="guided-report-button-legacy"
-            onClick={() => handleSetShowReportWizard(true)}
-            className="w-full flex items-center justify-between gap-3 text-left group cursor-pointer"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="h-11 w-11 rounded-xl bg-[#0F6E5D] text-white flex items-center justify-center shrink-0 group-hover:bg-[#0B5548] transition-colors">
-                <Sparkles className="h-5 w-5" />
+      {/* LANDING VIEW: 3 CARDS */}
+      {!reportSection && (
+        <div className="space-y-6 pt-2">
+          <div className="text-center py-2">
+            <h2 className="text-xl sm:text-2xl font-bold font-display text-slate-900">
+              Financial Reports & Statements
+            </h2>
+            <p className="text-xs text-slate-500 mt-1 max-w-lg mx-auto">
+              Select a report type below to view financial summaries, detailed category ledgers, or generate custom reports.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* 1. Summary Card */}
+            <button
+              onClick={() => handleSelectSection("summary")}
+              id="report-card-summary"
+              className="group bg-white p-5 rounded-2xl border border-emerald-100 shadow-xs hover:shadow-md hover:border-emerald-500 transition-all text-left flex flex-col justify-between cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
+                  📊
+                </div>
+                <ChevronRight className="h-5 w-5 text-emerald-600 group-hover:translate-x-1 transition-transform" />
               </div>
-              <div className="min-w-0">
-                <h3 className="text-sm font-bold text-slate-900 group-hover:text-teal-900 transition-colors">
-                  Get a Specific Report
+              <div className="mt-5">
+                <h3 className="font-bold text-base text-slate-900 group-hover:text-emerald-800 transition-colors">
+                  Summary
                 </h3>
-                <p className="text-[11px] text-slate-500">
-                  Answer a few questions and we'll build exactly the report you need — then export it.
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Financial summary statements, cash vs bank breakdown, and surplus/deficit balances.
                 </p>
               </div>
-            </div>
-            <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-teal-600 group-hover:translate-x-1 transition-transform shrink-0" />
-          </button>
-        )}
-      </div>
+            </button>
+
+            {/* 2. Detailed Report Card */}
+            <button
+              onClick={() => handleSelectSection("detailed")}
+              id="report-card-detailed"
+              className="group bg-white p-5 rounded-2xl border border-blue-100 shadow-xs hover:shadow-md hover:border-blue-500 transition-all text-left flex flex-col justify-between cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-800 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
+                  📑
+                </div>
+                <ChevronRight className="h-5 w-5 text-blue-600 group-hover:translate-x-1 transition-transform" />
+              </div>
+              <div className="mt-5">
+                <h3 className="font-bold text-base text-slate-900 group-hover:text-blue-800 transition-colors">
+                  Detailed Report
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Full ledger sheets for Payments, Receipts, Loans, Members, Assets, and FDs.
+                </p>
+              </div>
+            </button>
+
+            {/* 3. Specific Report Card */}
+            <button
+              onClick={() => handleSelectSection("specific")}
+              id="report-card-specific"
+              className="group bg-white p-5 rounded-2xl border border-teal-100 shadow-xs hover:shadow-md hover:border-teal-500 transition-all text-left flex flex-col justify-between cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 rounded-xl bg-teal-50 text-teal-800 flex items-center justify-center text-2xl group-hover:scale-105 transition-transform">
+                  ✨
+                </div>
+                <ChevronRight className="h-5 w-5 text-teal-600 group-hover:translate-x-1 transition-transform" />
+              </div>
+              <div className="mt-5">
+                <h3 className="font-bold text-base text-slate-900 group-hover:text-teal-800 transition-colors">
+                  Specific Report
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Guided step-by-step report builder for customized period and account head exports.
+                </p>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* SECTION 1: SUMMARY */}
+      {reportSection === "summary" && (
       <div className="space-y-4">
-        <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+        <div className="flex justify-between items-center border-b border-slate-200 pb-3">
+          <button
+            type="button"
+            onClick={() => handleSelectSection(null)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold text-xs shadow-2xs cursor-pointer"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Reports</span>
+          </button>
           <h2 className="text-base font-bold text-emerald-950">Summary</h2>
           <span className="text-xs font-semibold text-slate-500">
             {periodType === "year" && `Financial Year ${selectedYear}-${(selectedYear + 1).toString().slice(2)}`}
@@ -1453,21 +1407,21 @@ export default function Dashboard({
           </div>
         </div>
       </div>
+      )}
 
       {/* SECTION 2: DETAILED REPORTS */}
-      <div className="space-y-4 pt-4 border-t border-slate-200">
-        <div className="flex justify-between items-center gap-3 border-b border-slate-200 pb-2">
-          <h2 className="text-base font-bold text-emerald-950">Detailed Report</h2>
+      {reportSection === "detailed" && (
+      <div className="space-y-4">
+        <div className="flex justify-between items-center gap-3 border-b border-slate-200 pb-3">
           <button
             type="button"
-            id="guided-report-button"
-            onClick={() => handleSetShowReportWizard(true)}
-            className="hidden"
-            title="Build a report using guided choices"
+            onClick={() => handleSelectSection(null)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold text-xs shadow-2xs cursor-pointer"
           >
-            <Sparkles className="h-4 w-4 text-teal-700" />
-            Specific report
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Reports</span>
           </button>
+          <h2 className="text-base font-bold text-emerald-950">Detailed Report</h2>
         </div>
 
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center gap-3">
@@ -2463,18 +2417,44 @@ export default function Dashboard({
           )}
         </div>
       </div>
-    </div>
+      </div>
+      )}
+
+      {/* SECTION 3: SPECIFIC REPORT */}
+      {reportSection === "specific" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+            <button
+              type="button"
+              onClick={() => handleSelectSection(null)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold text-xs shadow-2xs cursor-pointer"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back to Reports</span>
+            </button>
+            <h2 className="text-base font-bold text-emerald-950">Specific Report</h2>
+          </div>
+
+          <ReportWizard
+            currentUser={currentUser}
+            accountHeads={accountHeads}
+            transactions={transactions}
+            assets={assets}
+            bankBalances={bankBalances}
+            members={members}
+            scopeLabel={scopeLabel}
+            onClose={() => handleSelectSection(null)}
+          />
+        </div>
+      )}
 
       {/* SPECIFIC REPORT WIZARD OVERLAY MODAL */}
       {showReportWizard && (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 p-3 sm:p-6"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-white p-3 sm:p-6"
           role="dialog"
           aria-modal="true"
           aria-label="Specific report builder"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) handleCloseReportWizard();
-          }}
         >
           <div className="w-full max-w-6xl my-3 sm:my-8">
             <ReportWizard

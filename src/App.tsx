@@ -59,6 +59,7 @@ export default function App() {
     const viewParam = hash.split("?")[0] || params.get("view") || "home";
     const tabParam = params.get("tab") as ReportTab | null;
     const wizardParam = params.get("wizard");
+    const sectionParam = params.get("section");
 
     const validViews: ("login" | "home" | "reports" | "admin")[] = ["login", "home", "reports", "admin"];
     const view = validViews.includes(viewParam as any) ? (viewParam as "login" | "home" | "reports" | "admin") : "home";
@@ -69,7 +70,10 @@ export default function App() {
     ];
     const tab = tabParam && validTabs.includes(tabParam) ? tabParam : "payments";
 
-    return { view, tab, wizard: wizardParam };
+    const validSections: ("summary" | "detailed" | "specific" | null)[] = ["summary", "detailed", "specific"];
+    const section = sectionParam && validSections.includes(sectionParam as any) ? (sectionParam as "summary" | "detailed" | "specific") : null;
+
+    return { view, tab, wizard: wizardParam, section };
   };
 
   const initialState = parseStateFromUrl();
@@ -79,6 +83,9 @@ export default function App() {
 
   // Selected report tab when navigating to reports
   const [activeReportTab, setActiveReportTab] = useState<ReportTab>(initialState.tab);
+
+  // Active report section state ("summary" | "detailed" | "specific" | null)
+  const [activeReportSection, setActiveReportSection] = useState<"summary" | "detailed" | "specific" | null>(initialState.section);
 
   // Report wizard overlay state synced with URL
   const [showReportWizard, setShowReportWizard] = useState<boolean>(initialState.view === "reports" && initialState.wizard === "true");
@@ -100,12 +107,15 @@ export default function App() {
     view: "login" | "home" | "reports" | "admin",
     tab?: ReportTab,
     wizard?: boolean | string | null,
+    section?: "summary" | "detailed" | "specific" | null,
     replace = false
   ) => {
     const targetTab = tab || activeReportTab;
+    const targetSection = section !== undefined ? section : (view === "reports" ? activeReportSection : null);
 
     setCurrentView(view);
     if (tab) setActiveReportTab(tab);
+    if (view === "reports") setActiveReportSection(targetSection);
 
     let targetReportWizard = showReportWizard;
     let targetHomeWizard = homeWizard;
@@ -126,6 +136,7 @@ export default function App() {
     let newHash = `#/${view}`;
     if (view === "reports") {
       let query = `view=reports&tab=${targetTab}`;
+      if (targetSection) query += `&section=${targetSection}`;
       if (targetReportWizard) query += `&wizard=true`;
       newHash = `#/${view}?${query}`;
     } else if (view === "home") {
@@ -136,9 +147,9 @@ export default function App() {
 
     if (window.location.hash !== newHash) {
       if (replace) {
-        window.history.replaceState({ view, tab: targetTab, wizard }, "", newHash);
+        window.history.replaceState({ view, tab: targetTab, wizard, section: targetSection }, "", newHash);
       } else {
-        window.history.pushState({ view, tab: targetTab, wizard }, "", newHash);
+        window.history.pushState({ view, tab: targetTab, wizard, section: targetSection }, "", newHash);
       }
     }
   };
@@ -149,6 +160,7 @@ export default function App() {
       const parsed = parseStateFromUrl();
       setCurrentView(parsed.view);
       setActiveReportTab(parsed.tab);
+      setActiveReportSection(parsed.section);
       setShowReportWizard(parsed.view === "reports" && parsed.wizard === "true");
       setHomeWizard(parsed.view === "home" ? parsed.wizard : null);
     };
@@ -162,7 +174,7 @@ export default function App() {
       }
     } else if (!window.location.hash) {
       window.history.replaceState(
-        { view: initialState.view, tab: initialState.tab, wizard: initialState.wizard },
+        { view: initialState.view, tab: initialState.tab, wizard: initialState.wizard, section: initialState.section },
         "",
         `#/${initialState.view}?view=${initialState.view}&tab=${initialState.tab}`
       );
@@ -198,8 +210,8 @@ export default function App() {
     navigateTo("login", undefined, null, true);
   };
 
-  const handleOpenReports = (tab?: ReportTab) => {
-    navigateTo("reports", tab || activeReportTab, false);
+  const handleOpenReports = (tab?: ReportTab, section?: "summary" | "detailed" | "specific" | null) => {
+    navigateTo("reports", tab || activeReportTab, false, section !== undefined ? section : (tab ? "detailed" : null));
   };
 
   // Manual entries must carry the official chapter code (e.g. KL-EK-CO01) like seeded rows do,
@@ -727,8 +739,10 @@ export default function App() {
               }}
               onUpdateTransaction={handleUpdateTransaction}
               initialReportTab={activeReportTab}
-              onReportTabChange={(tab) => navigateTo("reports", tab, showReportWizard)}
-              onReportWizardChange={(wizard) => navigateTo("reports", activeReportTab, wizard)}
+              onReportTabChange={(tab) => navigateTo("reports", tab, showReportWizard, activeReportSection)}
+              activeReportSection={activeReportSection}
+              onReportSectionChange={(sec) => navigateTo("reports", activeReportTab, showReportWizard, sec)}
+              onReportWizardChange={(wizard) => navigateTo("reports", activeReportTab, wizard, activeReportSection)}
               showReportWizard={showReportWizard}
               onBackToHome={() => navigateTo("home")}
             />
