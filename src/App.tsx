@@ -876,10 +876,10 @@ export default function App() {
                     {/* Left Side: Chapter Name & Chapter ID */}
                     <div>
                       <h2 className="text-xl sm:text-2xl font-bold font-display text-white">
-                        {CHAPTERS.find((c) => c.id === currentUser.nodeId)?.name || db?.chapterDirectory?.find((c) => c.id === currentUser.nodeId)?.chapterName || "Cochin Chapter"}
+                        {CHAPTERS.find((c) => c.id === currentUser.nodeId)?.name || db?.chapterDirectory?.find((c) => c.id === currentUser.nodeId || c.chapterName === currentUser.nodeId)?.chapterName || getFinancialUnitName(getUserFinancialUnitId(currentUser))}
                       </h2>
                       <span className="text-xs font-semibold text-teal-200/90 block mt-0.5 font-mono">
-                        ID: {currentUser.nodeId && currentUser.nodeId !== "cochin" ? currentUser.nodeId : "KL-EK-CO01"}
+                        ID: {getChapterCode(getUserFinancialUnitId(currentUser)) || currentUser.nodeId || "KL-EK-CO01"}
                       </span>
                     </div>
 

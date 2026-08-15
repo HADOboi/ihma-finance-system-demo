@@ -4,10 +4,10 @@
  */
 
 import React, { useState, useEffect } from "react";
+import { HeadType } from "../types";
 import type {
   User as UserType,
   AccountHead,
-  HeadType,
   Transaction,
   Member,
   MemberQualification,
@@ -127,8 +127,11 @@ export default function TreasurerEntry({
 }: TreasurerEntryProps) {
   // Determine chapter details
   const userUnitId = getUserFinancialUnitId(currentUser);
-  const defaultChapterId = getChapterCode(userUnitId);
-  const defaultChapterName = getFinancialUnitName(userUnitId);
+  const defaultChapterId = getChapterCode(userUnitId) || currentUser.nodeId || "KL-EK-CO01";
+  const defaultChapterName =
+    CHAPTERS.find((c) => c.id === currentUser.nodeId)?.name ||
+    chapterDirectory.find((c) => c.id === currentUser.nodeId || c.chapterName === currentUser.nodeId)?.chapterName ||
+    getFinancialUnitName(userUnitId);
 
   // Active Wizard Mode
   const [activeWizard, setActiveWizard] = useState<EntryWizardType>(() => mapUrlToWizard(activeHomeWizard));
@@ -441,7 +444,7 @@ export default function TreasurerEntry({
         chapterId: defaultChapterId,
         chapterName: defaultChapterName,
         assetNumber: generateAssetNumber(),
-        purchaseDate: "", // NO PREFILL
+        purchaseDate: todayStr, // Default to today
         quantity: 1,
         assetValue: 0,
         paymentMode: null, // STRICT NO-DEFAULT RULE
@@ -977,13 +980,31 @@ export default function TreasurerEntry({
     { key: "others", label: "Others", sub: "Unclassified or custom expense category", icon: Paperclip },
   ];
 
-  // Filter members for picker in alphabetical order
+  // Filter members for picker in alphabetical order (strictly for current chapter)
+  const currentChapterCode = defaultChapterId.toLowerCase();
+  const currentChapterNameClean = defaultChapterName.trim().toLowerCase();
+  const currentChapterNodeId = userUnitId.toLowerCase();
+
   const filteredMembers = [...membersList]
-    .filter(
-      (m) =>
-        m.memberName.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
-        m.memberId.toLowerCase().includes(memberSearchTerm.toLowerCase())
-    )
+    .filter((m) => {
+      const mChapterId = (m.chapterIdInput || "").toLowerCase();
+      const mChapterName = (m.chapterNameInput || "").trim().toLowerCase();
+      const matchesChapter =
+        !m.chapterIdInput ||
+        mChapterId === currentChapterCode ||
+        mChapterId === currentChapterNodeId ||
+        mChapterName === currentChapterNameClean ||
+        mChapterName.includes(currentChapterNameClean) ||
+        currentChapterNameClean.includes(mChapterName);
+
+      if (!matchesChapter) return false;
+
+      const term = memberSearchTerm.toLowerCase();
+      return (
+        m.memberName.toLowerCase().includes(term) ||
+        m.memberId.toLowerCase().includes(term)
+      );
+    })
     .sort((a, b) => a.memberName.localeCompare(b.memberName));
 
   // Filter chapters for loan picker (own chapter can never borrow from itself)
@@ -3967,13 +3988,22 @@ export default function TreasurerEntry({
                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                           Asset Purchase Date *
                         </label>
-                        <input
-                          type="date"
-                          max={new Date().toISOString().slice(0, 10)}
-                          value={formData.purchaseDate || ""}
-                          onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
-                          className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
-                        />
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="date"
+                            max={new Date().toISOString().slice(0, 10)}
+                            value={formData.purchaseDate || new Date().toISOString().slice(0, 10)}
+                            onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
+                            className="flex-1 px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold bg-white focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, purchaseDate: new Date().toISOString().slice(0, 10) })}
+                            className="px-4 py-3 bg-sky-50 text-sky-800 text-xs font-bold rounded-xl border border-sky-200 hover:bg-sky-100 cursor-pointer"
+                          >
+                            Today
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -4047,28 +4077,32 @@ export default function TreasurerEntry({
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div
                             onClick={() => setFormData({ ...formData, paymentMode: "Cash" })}
-                            className={`p-5 rounded-2xl border-2 cursor-pointer text-center transition-all ${
+                            className={`p-5 rounded-2xl border-2 transition-all cursor-pointer text-center space-y-2 ${
                               formData.paymentMode === "Cash"
-                                ? "border-sky-600 bg-sky-50"
-                                : "border-slate-200 hover:border-slate-300"
+                                ? "border-sky-600 bg-sky-50 ring-2 ring-sky-500/20"
+                                : "border-slate-200 hover:border-slate-300 bg-white"
                             }`}
                           >
-                            <div className="text-3xl">💵</div>
-                            <h4 className="font-bold text-sm mt-1">Cash</h4>
-                            <p className="text-xs text-slate-500">Paid from chapter cash in hand.</p>
+                            <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-800 flex items-center justify-center mx-auto">
+                              <Wallet className="h-5 w-5" />
+                            </div>
+                            <h4 className="font-bold text-base text-slate-900">Cash Payment</h4>
+                            <p className="text-xs text-slate-500">Paid out in cash from physical chapter cash drawer.</p>
                           </div>
 
                           <div
                             onClick={() => setFormData({ ...formData, paymentMode: "Bank" })}
-                            className={`p-5 rounded-2xl border-2 cursor-pointer text-center transition-all ${
+                            className={`p-5 rounded-2xl border-2 transition-all cursor-pointer text-center space-y-2 ${
                               formData.paymentMode === "Bank"
-                                ? "border-sky-600 bg-sky-50"
-                                : "border-slate-200 hover:border-slate-300"
+                                ? "border-sky-600 bg-sky-50 ring-2 ring-sky-500/20"
+                                : "border-slate-200 hover:border-slate-300 bg-white"
                             }`}
                           >
-                            <div className="text-3xl">🏦</div>
-                            <h4 className="font-bold text-sm mt-1">Bank</h4>
-                            <p className="text-xs text-slate-500">Paid by cheque, transfer or UPI.</p>
+                            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center mx-auto">
+                              <Landmark className="h-5 w-5" />
+                            </div>
+                            <h4 className="font-bold text-base text-slate-900">Bank Transfer / UPI</h4>
+                            <p className="text-xs text-slate-500">Paid directly from bank account via cheque, NEFT, or UPI.</p>
                           </div>
                         </div>
                       </div>
@@ -4477,7 +4511,7 @@ export default function TreasurerEntry({
                               value={formData.depositedByMemberId || ""}
                               onChange={(e) => {
                                 const memberId = e.target.value;
-                                const m = membersList.find((mm) => mm.memberId === memberId);
+                                const m = filteredMembers.find((mm) => mm.memberId === memberId);
                                 setFormData({ ...formData, depositedByMemberId: memberId, depositedBy: m?.memberName || "" });
                               }}
                               className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500 cursor-pointer"
@@ -4485,7 +4519,7 @@ export default function TreasurerEntry({
                               <option value="" disabled>
                                 Select member...
                               </option>
-                              {membersList.map((m) => (
+                              {filteredMembers.map((m) => (
                                 <option key={m.memberId} value={m.memberId}>
                                   {m.memberName} ({m.memberId})
                                 </option>
