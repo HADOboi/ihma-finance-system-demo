@@ -458,7 +458,7 @@ export function mapModelToDbExpense(model: ExpenseModel): DbExpenseRow {
     date: model.date,
     voucher_number: model.voucherNumber || null,
     paid_by: model.paidBy,
-    paidTo: model.paidTo,
+    paid_to: model.paidTo || null,
     accounts_head: model.accountsHead,
     payable_amount: model.payableAmount,
     paid_amount: model.paidAmount,

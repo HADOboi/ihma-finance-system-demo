@@ -235,32 +235,39 @@ export default function App() {
       formationDate: "2024-01-01",
     }));
 
-    const mappedMembers: Member[] = dbMembers.map((item) => ({
-      id: item.memberIdNo,
-      slNo: item.slNo || 1,
-      memberId: item.memberIdNo,
-      memberName: item.memberName,
-      chapterIdInput: item.chapterIdNo,
-      chapterNameInput: item.chapterName,
-      qualification: item.qualificationsList && item.qualificationsList.length > 0
-        ? item.qualificationsList.map((q) => q.degree).join(", ")
-        : item.qualification,
-      qualificationsList: item.qualificationsList,
-      membershipType: (item.membershipType as any) || "General",
-      membershipDate: item.membershipDate || "2024-01-01",
-      membershipStatus: (item.membershipStatus as any) || "Active",
-      mobileNumber: item.mobileNo || "",
-      whatsappNumber: item.whatsappNo || item.mobileNo || "",
-      email: item.emailAddress || "",
-      clinicNumber: item.contactNumberLandline || "",
-      gender: item.gender,
-      dob: item.dob,
-      bloodGroup: item.bloodGroup,
-      specialization: item.specialization,
-      clinicAddress: item.clinicAddress,
-      residentialAddress: item.residentialAddress,
-      associationRole: item.designation,
-    }));
+    const mappedMembers: Member[] = dbMembers.map((item: any) => {
+      const mId = item.memberId || item.memberIdNo || item.id || "";
+      const degrees = item.qualifications && Array.isArray(item.qualifications)
+        ? item.qualifications.map((q: any) => q.degree || q.qualificationName || "").filter(Boolean).join(", ")
+        : (item.qualificationsList && Array.isArray(item.qualificationsList)
+          ? item.qualificationsList.map((q: any) => q.degree || "").filter(Boolean).join(", ")
+          : (item.qualification || ""));
+
+      return {
+        id: mId,
+        slNo: item.slNo || 1,
+        memberId: mId,
+        memberName: item.memberName || "",
+        chapterIdInput: item.chapterIdNo || item.chapterIdInput || "",
+        chapterNameInput: item.chapterName || item.chapterNameInput || "",
+        qualification: degrees,
+        qualificationsList: item.qualificationsList || item.qualifications || [],
+        membershipType: (item.membershipType as any) || "General",
+        membershipDate: item.membershipDate || "2024-01-01",
+        membershipStatus: (item.membershipStatus as any) || "Active",
+        mobileNumber: item.mobileNumber || item.mobileNo || "",
+        whatsappNumber: item.whatsappNumber || item.whatsappNo || item.mobileNo || "",
+        email: item.emailAddress || item.email || "",
+        clinicNumber: item.contactNumberLandline || item.clinicNumber || "",
+        gender: item.gender,
+        dob: item.dob,
+        bloodGroup: item.bloodGroup,
+        specialization: item.specialization,
+        clinicAddress: item.clinicAddress,
+        residentialAddress: item.residentialAddress,
+        associationRole: item.designation || item.associationRole,
+      };
+    });
 
     setDb((prev) => {
       const base = prev || loadDatabase();
