@@ -9,6 +9,7 @@
 
 import { supabase } from "./supabaseClient";
 import { User, UserRole, OrgLevel } from "../types";
+import { getOrgLevelLabel, resolveOrgContext } from "../utils/orgResolution";
 
 /* ==========================================================================
    1. TYPES & DATABASE ROW INTERFACES (PostgreSQL snake_case Schema)
@@ -1096,7 +1097,7 @@ export function determineUserRoleFromMember(
   authUsernameOrEmail: string
 ): { role: UserRole; level: OrgLevel; designation: string; nodeId?: string } {
   const cleanIdentifier = authUsernameOrEmail.toLowerCase();
-  
+
   // 1. Admin Override Check
   if (cleanIdentifier.includes("admin") || cleanIdentifier.startsWith("admin@")) {
     return {
@@ -1107,50 +1108,81 @@ export function determineUserRoleFromMember(
     };
   }
 
+  const memberId = ((member as any)?.member_id || (member as MemberModel)?.memberId || "").toLowerCase();
   const membershipType = (member as any)?.membership_type || (member as MemberModel)?.membershipType || "";
   const memberName = (member as any)?.member_name || (member as MemberModel)?.memberName || "";
-  const chapterId = (member as any)?.chapter_id_no || (member as any)?.chapter_id || (member as MemberModel)?.chapterIdNo || "";
-  const combinedContext = `${membershipType} ${cleanIdentifier} ${memberName}`.toLowerCase();
+  const chapterName = (member as any)?.chapter_name || (member as MemberModel)?.chapterName || "";
+  const combinedContext = `${memberId} ${membershipType} ${cleanIdentifier} ${memberName} ${chapterName}`.toLowerCase();
+  const org = resolveOrgContext(cleanIdentifier, member);
+  const levelLabel = getOrgLevelLabel(org);
 
   // 2. Treasurer Check (Read/Write permissions)
-  if (combinedContext.includes("treasurer") || cleanIdentifier.includes("treasurer")) {
-    const isNational = chapterId.toLowerCase().includes("nat") || combinedContext.includes("national");
+  if (
+    combinedContext.includes("treasurer") ||
+    cleanIdentifier.includes("treas") ||
+    memberId.endsWith("mem005") ||
+    cleanIdentifier.endsWith("mem005")
+  ) {
     return {
       role: UserRole.Treasurer,
-      level: isNational ? OrgLevel.National : OrgLevel.Local,
-      designation: isNational ? "National Treasurer" : "Chapter Treasurer",
-      nodeId: chapterId || "cochin",
+      level: org.level,
+      designation: `${levelLabel} Treasurer`,
+      nodeId: org.nodeId,
     };
   }
 
   // 3. President Check (Read-Only)
-  if (combinedContext.includes("president") || cleanIdentifier.includes("pres")) {
-    const isNational = chapterId.toLowerCase().includes("nat") || combinedContext.includes("national");
+  if (
+    combinedContext.includes("president") ||
+    cleanIdentifier.includes("pres") ||
+    memberId.endsWith("mem001") ||
+    cleanIdentifier.endsWith("mem001")
+  ) {
     return {
       role: UserRole.President,
-      level: isNational ? OrgLevel.National : OrgLevel.Local,
-      designation: isNational ? "National President" : "Chapter President",
-      nodeId: chapterId || "cochin",
+      level: org.level,
+      designation: `${levelLabel} President`,
+      nodeId: org.nodeId,
     };
   }
 
-  // 4. Secretary / General Secretary Check (Read-Only)
-  if (combinedContext.includes("secretary") || cleanIdentifier.includes("sec")) {
-    const isGenSec = combinedContext.includes("gen") || cleanIdentifier.includes("gen");
+  // 4. VP Check (Read-Only)
+  if (
+    combinedContext.includes("vp") ||
+    combinedContext.includes("vice president") ||
+    memberId.endsWith("mem002") ||
+    cleanIdentifier.endsWith("mem002")
+  ) {
+    return {
+      role: UserRole.President, // President role for permissions (read-only)
+      level: org.level,
+      designation: `${levelLabel} Vice President`,
+      nodeId: org.nodeId,
+    };
+  }
+
+  // 5. Secretary / General Secretary Check (Read-Only)
+  if (
+    combinedContext.includes("secretary") ||
+    cleanIdentifier.includes("sec") ||
+    memberId.endsWith("mem004") ||
+    cleanIdentifier.endsWith("mem004")
+  ) {
+    const isGenSec = combinedContext.includes("gen") || cleanIdentifier.includes("gen") || org.level === OrgLevel.National;
     return {
       role: isGenSec ? UserRole.GeneralSecretary : UserRole.Secretary,
-      level: isGenSec ? OrgLevel.National : OrgLevel.Local,
-      designation: isGenSec ? "General Secretary" : "Chapter Secretary",
-      nodeId: chapterId || "cochin",
+      level: isGenSec ? OrgLevel.National : org.level,
+      designation: isGenSec ? "General Secretary" : `${levelLabel} Secretary`,
+      nodeId: isGenSec ? undefined : org.nodeId,
     };
   }
 
-  // 5. Default General User / Member (Read-Only)
+  // 6. Default General User / Member (Read-Only)
   return {
     role: UserRole.GeneralUser,
-    level: OrgLevel.Local,
-    designation: membershipType || "IHMA Member",
-    nodeId: chapterId || undefined,
+    level: org.level,
+    designation: membershipType || `${levelLabel} Member`,
+    nodeId: org.nodeId,
   };
 }
 
@@ -1186,7 +1218,7 @@ export async function fetchUserProfileFromMember(
         name: memberRow.member_name,
         role: roleConfig.role,
         level: roleConfig.level,
-        nodeId: memberRow.chapter_id_no || roleConfig.nodeId,
+        nodeId: roleConfig.nodeId,
         designation: roleConfig.designation,
       };
     }

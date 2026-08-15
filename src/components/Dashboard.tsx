@@ -25,7 +25,10 @@ import {
   PRELOADED_MEMBERS,
 } from "../mockData";
 import { formatDateDMY, formatINR } from "../utils/formatters";
-import { getFinancialUnitName, getReadableFinancialUnitIds, getUserFinancialUnitId } from "../utils/financialUnits";
+import { getReadableFinancialUnitIds, getUserFinancialUnitId } from "../utils/financialUnits";
+import { isEntityInScope } from "../utils/orgResolution";
+import { useGeoFilters } from "../hooks/useGeoFilters";
+import GeoFilterPanel from "./GeoFilterPanel";
 import ReportWizard from "./ReportWizard";
 import {
   TrendingUp,
@@ -117,111 +120,6 @@ type ReportTab =
   | "yearly"
   | "raw";
 
-type GeoFilterKey = "states" | "districts" | "chapters";
-
-interface GeoOption {
-  id: string;
-  name: string;
-  /** Small trailing note, e.g. the district a chapter belongs to. */
-  hint?: string;
-}
-
-/**
- * Compact multiselect dropdown used for the cascading State / District / Chapter
- * filters. Selection stays in the parent so the existing cascade rules apply.
- */
-function MultiSelectFilter({
-  label,
-  options,
-  selectedIds,
-  isOpen,
-  onToggleOpen,
-  onToggleOption,
-  onSelectAll,
-  onClear,
-  emptyHint,
-  idPrefix,
-  wrapperId,
-}: {
-  label: string;
-  options: GeoOption[];
-  selectedIds: string[];
-  isOpen: boolean;
-  onToggleOpen: () => void;
-  onToggleOption: (id: string) => void;
-  onSelectAll: () => void;
-  onClear: () => void;
-  emptyHint: string;
-  idPrefix: string;
-  wrapperId: string;
-}) {
-  const isEmpty = options.length === 0;
-  // Count only what is actually offered, so a stale id can never inflate the label.
-  const chosen = options.filter((o) => selectedIds.includes(o.id));
-
-  let summary: string;
-  if (isEmpty) summary = emptyHint;
-  else if (chosen.length === 0) summary = `None selected (${options.length} available)`;
-  else if (chosen.length === options.length) summary = `All ${label.toLowerCase()} (${options.length})`;
-  else if (chosen.length <= 2) summary = chosen.map((o) => o.name).join(", ");
-  else summary = `${chosen.length} of ${options.length} selected`;
-
-  return (
-    <div className="relative" id={wrapperId}>
-      <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">{label}</span>
-      <button
-        type="button"
-        disabled={isEmpty}
-        onClick={onToggleOpen}
-        id={`${idPrefix}-dropdown-button`}
-        aria-expanded={isOpen}
-        className={`w-full flex items-center justify-between gap-2 px-3 py-2 bg-white border rounded-xl text-xs font-bold shadow-2xs transition-colors ${
-          isEmpty
-            ? "border-slate-200 text-slate-400 cursor-not-allowed"
-            : "border-slate-300 text-slate-700 hover:border-blue-400 cursor-pointer"
-        }`}
-      >
-        <span className="truncate text-left">{summary}</span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-
-      {isOpen && !isEmpty && (
-        <div className="absolute left-0 right-0 z-30 mt-1.5 bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 bg-slate-50/70">
-            <button type="button" onClick={onSelectAll} className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer">
-              Select all
-            </button>
-            <button type="button" onClick={onClear} className="text-[10px] font-bold text-slate-500 hover:underline cursor-pointer">
-              Clear
-            </button>
-          </div>
-          <div className="max-h-56 overflow-y-auto p-1.5 space-y-0.5">
-            {options.map((o) => {
-              const checked = selectedIds.includes(o.id);
-              return (
-                <label
-                  key={o.id}
-                  id={`${idPrefix}-${o.id}`}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => onToggleOption(o.id)}
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="truncate">{o.name}</span>
-                  {o.hint && <span className="text-[9px] text-slate-400 ml-auto shrink-0">{o.hint}</span>}
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function Dashboard({
   currentUser,
   accountHeads,
@@ -285,36 +183,34 @@ export default function Dashboard({
   const [repaymentDate, setRepaymentDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [repaymentRemarks, setRepaymentRemarks] = useState<string>("");
 
-  // --- Hierarchical Filter States ---
-  // Nothing is preselected: the user picks what they want to look at. A Local
-  // user is the exception, since they get no dropdown to pick with.
-  const [selectedStates, setSelectedStates] = useState<string[]>([]);
-
-  const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
-
-  const [selectedChapters, setSelectedChapters] = useState<string[]>(
-    currentUser.level === OrgLevel.Local ? [currentUser.nodeId || ""] : []
-  );
-  const [includeOwnFinancialUnit, setIncludeOwnFinancialUnit] = useState<boolean>(currentUser.level === OrgLevel.Local);
-
-  // Only one geo dropdown is open at a time; clicking outside the row closes it.
-  const [openGeoFilter, setOpenGeoFilter] = useState<GeoFilterKey | null>(null);
-  const geoFilterRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!openGeoFilter) return;
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (geoFilterRef.current && !geoFilterRef.current.contains(e.target as Node)) {
-        setOpenGeoFilter(null);
-      }
-    };
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, [openGeoFilter]);
-
-  const toggleGeoFilter = (key: GeoFilterKey) => {
-    setOpenGeoFilter((current) => (current === key ? null : key));
-  };
+  const geoFilters = useGeoFilters(currentUser, chapterDirectory);
+  const {
+    geoFilterRef,
+    openGeoFilter,
+    toggleGeoFilter,
+    includeOwnFinancialUnit,
+    setIncludeOwnFinancialUnit,
+    userFinancialUnitId,
+    selectedStates,
+    selectedDistricts,
+    selectedChapters,
+    availableDistricts,
+    availableChapters,
+    chapterOptions,
+    selectedFinancialUnitIds,
+    hasAnyGeoSelection,
+    districtEmptyHint,
+    chapterEmptyHint,
+    handleStateToggle,
+    handleDistrictToggle,
+    handleChapterToggle,
+    selectAllStates,
+    selectNoneStates,
+    selectAllDistricts,
+    selectNoneDistricts,
+    selectAllChapters,
+    selectNoneChapters,
+  } = geoFilters;
 
   // Search filter
   const [searchTerm, setSearchTerm] = useState("");
@@ -381,171 +277,11 @@ export default function Dashboard({
     return chapName.toLowerCase().includes("chapter") ? chapName : `${chapName} Chapter`;
   }, [currentUser]);
 
-  const userFinancialUnitId = useMemo(() => getUserFinancialUnitId(currentUser), [currentUser]);
-  const readableFinancialUnitIds = useMemo(() => getReadableFinancialUnitIds(currentUser), [currentUser]);
-
-  // --- Dynamic Filtering Lists for UI ---
-  // Combine static mock CHAPTERS and Supabase DB chapterDirectory to ensure all chapters/districts work
-  const combinedChapters = useMemo(() => {
-    const list = [...CHAPTERS];
-    const existingIds = new Set(list.map((c) => c.id));
-
-    (chapterDirectory || []).forEach((c) => {
-      if (!c.id) return;
-      const districtId = c.district ? c.district.toLowerCase().replace(/\s+/g, "_") : "";
-      if (!existingIds.has(c.id)) {
-        list.push({
-          id: c.id,
-          name: c.chapterName,
-          districtId: districtId,
-        });
-        existingIds.add(c.id);
-      }
-    });
-    return list;
-  }, [chapterDirectory]);
-
-  const combinedDistricts = useMemo(() => {
-    const list = [...DISTRICTS];
-    const existingIds = new Set(list.map((d) => d.id));
-
-    (chapterDirectory || []).forEach((c) => {
-      if (!c.district) return;
-      const distId = c.district.toLowerCase().replace(/\s+/g, "_");
-      const stateId = c.state ? c.state.toLowerCase().replace(/\s+/g, "_") : "kerala";
-      if (!existingIds.has(distId)) {
-        list.push({
-          id: distId,
-          name: c.district,
-          stateId: stateId,
-        });
-        existingIds.add(distId);
-      }
-    });
-    return list;
-  }, [chapterDirectory]);
-
-  // Districts available under chosen States
-  const availableDistricts = useMemo(() => {
-    if (currentUser.level === OrgLevel.National) {
-      const stateScope = selectedStates.length > 0 ? selectedStates : STATES.map((s) => s.id);
-      return combinedDistricts.filter((d) => stateScope.includes(d.stateId));
-    }
-    if (currentUser.level === OrgLevel.State) {
-      const userState = (currentUser.nodeId || "").toLowerCase();
-      return combinedDistricts.filter((d) => {
-        const dState = (d.stateId || "").toLowerCase();
-        return dState === userState || (userState.includes("kerala") && dState.includes("kerala")) || d.stateId === currentUser.nodeId;
-      });
-    }
-    return [];
-  }, [selectedStates, currentUser, combinedDistricts]);
-
-  // Chapters available under chosen Districts
-  const availableChapters = useMemo(() => {
-    if (currentUser.level === OrgLevel.National || currentUser.level === OrgLevel.State) {
-      const districtScope = selectedDistricts.length > 0 ? selectedDistricts : availableDistricts.map((d) => d.id);
-      return combinedChapters.filter((c) => districtScope.includes(c.districtId));
-    }
-    if (currentUser.level === OrgLevel.District) {
-      const userDist = currentUser.nodeId?.toLowerCase() || "";
-      return combinedChapters.filter((c) => c.districtId === currentUser.nodeId || c.districtId === userDist || c.districtId === userDist.replace(/\s+/g, "_"));
-    }
-    return [];
-  }, [selectedDistricts, currentUser, availableDistricts, combinedChapters]);
-
-  const selectedFinancialUnitIds = useMemo(() => {
-    if (currentUser.level === OrgLevel.Local) return [userFinancialUnitId];
-    // For every level above Local, an empty selection means nothing is picked
-    // yet — it must NOT silently fall back to "everything".
-    const stateUnits = selectedStates;
-    const districtUnits = selectedDistricts;
-    const localUnits = selectedChapters;
-    const ownUnit = includeOwnFinancialUnit ? [userFinancialUnitId] : [];
-    return [...new Set([...ownUnit, ...stateUnits, ...districtUnits, ...localUnits])]
-      .filter((id) => readableFinancialUnitIds.includes(id));
-  }, [currentUser.level, userFinancialUnitId, includeOwnFinancialUnit, selectedStates, selectedDistricts, selectedChapters, readableFinancialUnitIds]);
-
-  const hasAnyGeoSelection = currentUser.level === OrgLevel.Local
-    ? true
-    : selectedFinancialUnitIds.length > 0;
-
-  // Handle toggles. Selecting never auto-selects anything downstream — the user
-  // picks each level themselves. Deselecting still prunes downstream choices
-  // that are no longer reachable, so nothing filters the data invisibly.
-  const handleStateToggle = (stateId: string) => {
-    const updated = selectedStates.includes(stateId)
-      ? selectedStates.filter((id) => id !== stateId)
-      : [...selectedStates, stateId];
-    setSelectedStates(updated);
-
-    const stillValidDists = combinedDistricts.filter(
-      (d) => updated.includes(d.stateId) && selectedDistricts.includes(d.id)
-    ).map((d) => d.id);
-    setSelectedDistricts(stillValidDists);
-    setSelectedChapters((prev) =>
-      prev.filter((chapId) => {
-        const chap = combinedChapters.find((c) => c.id === chapId);
-        return chap ? stillValidDists.includes(chap.districtId) : false;
-      })
-    );
-  };
-
-  const handleDistrictToggle = (distId: string) => {
-    const updated = selectedDistricts.includes(distId)
-      ? selectedDistricts.filter((id) => id !== distId)
-      : [...selectedDistricts, distId];
-    setSelectedDistricts(updated);
-
-    setSelectedChapters((prev) =>
-      prev.filter((chapId) => {
-        const chap = combinedChapters.find((c) => c.id === chapId);
-        return chap ? updated.includes(chap.districtId) : false;
-      })
-    );
-  };
-
-  const handleChapterToggle = (chapId: string) => {
-    if (selectedChapters.includes(chapId)) {
-      setSelectedChapters(selectedChapters.filter((id) => id !== chapId));
-    } else {
-      setSelectedChapters([...selectedChapters, chapId]);
-    }
-  };
-
-  const selectAllStates = () => {
-    setSelectedStates(STATES.map((s) => s.id));
-  };
-
-  const selectNoneStates = () => {
-    setSelectedStates([]);
-    setSelectedDistricts([]);
-    setSelectedChapters([]);
-  };
-
-  const selectAllDistricts = () => {
-    setSelectedDistricts(availableDistricts.map((d) => d.id));
-  };
-
-  const selectNoneDistricts = () => {
-    setSelectedDistricts([]);
-    // Chapters hang off districts, so clearing districts must clear them too.
-    setSelectedChapters([]);
-  };
-
-  const selectAllChapters = () => {
-    setSelectedChapters(availableChapters.map((c) => c.id));
-  };
-
-  const selectNoneChapters = () => {
-    setSelectedChapters([]);
-  };
-
   const filterTransactions = (
     period: PeriodType, year: number, month: number, day: string, from: string, to: string, includeSearch = false
   ) => transactions.filter((tx) => {
       // 1. Organizational chapter filter
-      if (!selectedFinancialUnitIds.includes(tx.financialUnitId || tx.chapterId)) {
+      if (!isEntityInScope(tx.financialUnitId || tx.chapterId, selectedFinancialUnitIds)) {
         return false;
       }
 
@@ -933,10 +669,11 @@ export default function Dashboard({
   }, [chapterDirectory, selectedChapters]);
 
   const isChapterInScope = (chapterId?: string, chapterName?: string) =>
-    selectedFinancialUnitIds.includes(chapterId || "") ||
+    isEntityInScope(chapterId, selectedFinancialUnitIds) ||
+    isEntityInScope(chapterName, selectedFinancialUnitIds) ||
     allowedChapterDirectoryIds.has(chapterId || "") ||
     CHAPTERS.some(
-      (chapter) => selectedChapters.includes(chapter.id) && chapter.name === chapterName
+      (chapter) => selectedChapters.includes(chapter.id) && (chapter.name === chapterName || chapter.id === chapterId)
     );
 
   const filteredMembers = useMemo(() => {
@@ -1099,11 +836,11 @@ export default function Dashboard({
         </div>
       )}
 
-      {/* 1. SELECTION FILTERS PANEL (Based on User's Org Level) - Only on Reports Landing */}
+      {/* LANDING VIEW: HEADER & 3 CARDS */}
       {!reportSection && (
-        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs" id="dashboard-filters-container">
-          <div className={`flex flex-col gap-3 ${currentUser.level !== OrgLevel.Local ? "mb-4 border-b border-slate-100 pb-4" : ""}`}>
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs" id="dashboard-landing-header">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
               {onBackToHome && (
                 <button
                   type="button"
@@ -1116,102 +853,20 @@ export default function Dashboard({
                   Back to Home
                 </button>
               )}
+            </div>
 
-              <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-200 text-[11px] font-bold">
-                  {scopeLabel}
-                </span>
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200 text-[11px] font-bold">
-                  {currentUser.level}
-                </span>
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-bold">
-                  {currentUser.role === "Treasurer" ? "Treasurer (R/W)" : `${currentUser.role} (RO)`}
-                </span>
-              </div>
+            <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-200 text-[11px] font-bold">
+                {scopeLabel}
+              </span>
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200 text-[11px] font-bold">
+                {currentUser.level}
+              </span>
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-bold">
+                {currentUser.role === "Treasurer" ? "Treasurer (R/W)" : `${currentUser.role} (RO)`}
+              </span>
             </div>
           </div>
-
-
-          {currentUser.level !== OrgLevel.Local && (
-            <div className="space-y-5">
-              {/* A. Geographical / Organizational selections (Cascading) */}
-              <div className="grid grid-cols-1 gap-4">
-                <div
-                  ref={geoFilterRef}
-                  id="geo-filter-row"
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 border-b border-slate-100 pb-4"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setIncludeOwnFinancialUnit((selected) => !selected)}
-                    className={`sm:col-span-2 lg:col-span-3 flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border text-left text-xs font-bold cursor-pointer ${includeOwnFinancialUnit ? "bg-teal-50 border-teal-300 text-teal-900" : "bg-white border-slate-300 text-slate-700 hover:border-teal-300"}`}
-                  >
-                    <span>Include {getFinancialUnitName(userFinancialUnitId)}</span>
-                    <span className={`h-5 w-5 rounded-md border flex items-center justify-center ${includeOwnFinancialUnit ? "bg-[#0F6E5D] border-[#0F6E5D] text-white" : "border-slate-300"}`}>{includeOwnFinancialUnit && <Check className="h-3.5 w-3.5" />}</span>
-                  </button>
-                  {/* National Level View: Select States */}
-                  {currentUser.level === OrgLevel.National && (
-                    <MultiSelectFilter
-                      label="States"
-                      wrapperId="state-selector-wrapper"
-                      idPrefix="state-filter"
-                      options={STATES.map((s) => ({ id: s.id, name: s.name }))}
-                      selectedIds={selectedStates}
-                      isOpen={openGeoFilter === "states"}
-                      onToggleOpen={() => toggleGeoFilter("states")}
-                      onToggleOption={handleStateToggle}
-                      onSelectAll={selectAllStates}
-                      onClear={selectNoneStates}
-                      emptyHint="No states available"
-                    />
-                  )}
-
-                  {/* National & State View: Select Districts */}
-                  {(currentUser.level === OrgLevel.National || currentUser.level === OrgLevel.State) && (
-                    <MultiSelectFilter
-                      label="Districts"
-                      wrapperId="district-selector-wrapper"
-                      idPrefix="district-filter"
-                      options={availableDistricts.map((d) => ({ id: d.id, name: d.name }))}
-                      selectedIds={selectedDistricts}
-                      isOpen={openGeoFilter === "districts"}
-                      onToggleOpen={() => toggleGeoFilter("districts")}
-                      onToggleOption={handleDistrictToggle}
-                      onSelectAll={selectAllDistricts}
-                      onClear={selectNoneDistricts}
-                      emptyHint="Select a state first"
-                    />
-                  )}
-
-                  {/* Select Chapters (Visible on National, State, and District levels) */}
-                  <MultiSelectFilter
-                    label="Local Chapters"
-                    wrapperId="chapter-selector-wrapper"
-                    idPrefix="chapter-filter"
-                    options={availableChapters.map((c) => ({
-                      id: c.id,
-                      name: c.name,
-                      hint: combinedDistricts.find((d) => d.id === c.districtId)?.name || DISTRICTS.find((d) => d.id === c.districtId)?.name || "",
-                    }))}
-                    selectedIds={selectedChapters}
-                    isOpen={openGeoFilter === "chapters"}
-                    onToggleOpen={() => toggleGeoFilter("chapters")}
-                    onToggleOption={handleChapterToggle}
-                    onSelectAll={selectAllChapters}
-                    onClear={selectNoneChapters}
-                    emptyHint="Select a district first"
-                  />
-                </div>
-
-              {!hasAnyGeoSelection && (
-                <div id="no-geo-selection-notice" className="flex items-center gap-2.5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-semibold text-amber-800">
-                  <Info className="h-4 w-4 shrink-0" />
-                  Select at least one state, district or chapter above to view data. Nothing is shown until you make a selection.
-                </div>
-              )}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -1318,6 +973,9 @@ export default function Dashboard({
             </span>
           </div>
         </div>
+
+        {/* GEOGRAPHICAL FILTER PANEL */}
+        <GeoFilterPanel currentUser={currentUser} {...geoFilters} />
 
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center gap-3">
           <div className="flex items-center gap-2 shrink-0"><Calendar className="h-4 w-4 text-blue-600" /><span className="text-xs font-bold text-slate-800">Summary period</span></div>
@@ -1500,6 +1158,9 @@ export default function Dashboard({
             </span>
           </div>
         </div>
+
+        {/* GEOGRAPHICAL FILTER PANEL */}
+        <GeoFilterPanel currentUser={currentUser} {...geoFilters} />
 
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center gap-3">
           <div className="flex items-center gap-2 shrink-0">
@@ -2509,6 +2170,7 @@ export default function Dashboard({
             assets={assets}
             bankBalances={bankBalances}
             members={members}
+            chapterDirectory={chapterDirectory}
             scopeLabel={scopeLabel}
             onClose={() => handleSelectSection(null)}
           />
@@ -2531,6 +2193,7 @@ export default function Dashboard({
               assets={assets}
               bankBalances={bankBalances}
               members={members}
+              chapterDirectory={chapterDirectory}
               scopeLabel={scopeLabel}
               onClose={handleCloseReportWizard}
             />

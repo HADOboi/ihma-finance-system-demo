@@ -12,11 +12,15 @@ import {
   OrgLevel,
   Asset,
   BankBalance,
+  ChapterMaster,
   Member,
 } from "../types";
 import { CHAPTERS, DISTRICTS } from "../mockData";
 import { FINANCIAL_UNITS, getReadableFinancialUnitIds, getUserFinancialUnitId } from "../utils/financialUnits";
 import { formatDateDMY, formatINR } from "../utils/formatters";
+import { isEntityInScope } from "../utils/orgResolution";
+import { useGeoFilters } from "../hooks/useGeoFilters";
+import GeoFilterPanel from "./GeoFilterPanel";
 import {
   ArrowLeft,
   ArrowDownRight,
@@ -43,6 +47,7 @@ interface ReportWizardProps {
   assets: Asset[];
   bankBalances: BankBalance[];
   members: Member[];
+  chapterDirectory?: ChapterMaster[];
   scopeLabel: string;
   onClose: () => void;
 }
@@ -77,6 +82,7 @@ export default function ReportWizard({
   assets,
   bankBalances,
   members,
+  chapterDirectory = [],
   scopeLabel,
   onClose,
 }: ReportWizardProps) {
@@ -84,13 +90,9 @@ export default function ReportWizard({
   const currentYear = new Date().getFullYear();
 
   const [currentStep, setCurrentStep] = useState<number>(0);
-  const userFinancialUnitId = getUserFinancialUnitId(currentUser);
-  const readableFinancialUnitIds = useMemo(() => getReadableFinancialUnitIds(currentUser), [currentUser]);
-  const [selectedFinancialUnitIds, setSelectedFinancialUnitIds] = useState<string[]>(
-    currentUser.level === OrgLevel.Local ? [userFinancialUnitId] : []
-  );
+  const geoFilters = useGeoFilters(currentUser, chapterDirectory);
 
-  // Step 1 — period
+  // Step 2 (or 1) — period
   const [periodType, setPeriodType] = useState<WizardPeriod | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
@@ -98,10 +100,10 @@ export default function ReportWizard({
   const [rangeStart, setRangeStart] = useState<string>("");
   const [rangeEnd, setRangeEnd] = useState<string>("");
 
-  // Step 2 — which sections
+  // Step 3 (or 2) — which sections
   const [sections, setSections] = useState<ReportSection[]>([]);
 
-  // Step 3 — account heads (only when Income and/or Expense chosen)
+  // Step 4 (or 3) — account heads (only when Income and/or Expense chosen)
   const [selectedHeadIds, setSelectedHeadIds] = useState<string[]>([]);
 
   const wantsIncome = sections.includes("income");
@@ -113,7 +115,7 @@ export default function ReportWizard({
 
   const steps = useMemo(() => {
     const list = [
-      ...(currentUser.level === OrgLevel.Local ? [] : [{ id: "units", title: "Which chapters?", sub: "Select exactly the chapters to include. Parents and descendants are never added automatically." }]),
+      ...(currentUser.level === OrgLevel.Local ? [] : [{ id: "geo", title: "Select Chapter / Scope", sub: "Filter by States, Districts, Local Chapters, and include your own entity." }]),
       { id: "period", title: "Report Period", sub: "Pick the time span this report should cover." },
       { id: "sections", title: "What should the report contain?", sub: "Choose one, or select several to combine them." },
     ];
@@ -165,7 +167,7 @@ export default function ReportWizard({
   };
 
   const inScope = (financialUnitId?: string) =>
-    selectedFinancialUnitIds.includes(financialUnitId || "");
+    isEntityInScope(financialUnitId, geoFilters.selectedFinancialUnitIds);
 
   const headMatches = (headId: string) => selectedHeadIds.length === 0 || selectedHeadIds.includes(headId);
 
@@ -349,14 +351,14 @@ export default function ReportWizard({
     return blocks;
   }, [
     dateWindow, sections, selectedHeadIds, transactions, assets, bankBalances, members,
-    selectedFinancialUnitIds, wantsIncome, wantsExpense,
+    geoFilters.selectedFinancialUnitIds, wantsIncome, wantsExpense,
   ]);
 
   const totalRowCount = resultBlocks.reduce((sum, b) => sum + b.rows.length, 0);
 
   // --- Step gating ---
   const isStepValid = () => {
-    if (currentStepConfig.id === "units") return true; // selecting none is valid and yields an empty report
+    if (currentStepConfig.id === "geo") return true;
     if (currentStepConfig.id === "period") return dateWindow !== null;
     if (currentStepConfig.id === "sections") return sections.length > 0;
     return true; // heads step is optional; result step has no Next
@@ -526,29 +528,15 @@ export default function ReportWizard({
 
       {/* Step Content */}
       <div className="p-4 sm:p-6 space-y-4">
-        {/* ---------------- STEP: FINANCIAL UNITS ---------------- */}
-        {currentStepConfig.id === "units" && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {FINANCIAL_UNITS.filter((unit) => readableFinancialUnitIds.includes(unit.id)).map((unit) => {
-                const active = selectedFinancialUnitIds.includes(unit.id);
-                return (
-                  <button
-                    key={unit.id}
-                    type="button"
-                    onClick={() => setSelectedFinancialUnitIds((current) => active ? current.filter((id) => id !== unit.id) : [...current, unit.id])}
-                    className={`p-3.5 rounded-xl border-2 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${active ? "border-[#0F6E5D] bg-teal-50 shadow-xs" : "border-slate-200 bg-white hover:border-slate-300"}`}
-                  >
-                    <span>
-                      <span className={`text-sm font-bold block ${active ? "text-teal-900" : "text-slate-800"}`}>{unit.name}</span>
-                      <span className="text-[10px] text-slate-500 block mt-0.5">{unit.level} chapter</span>
-                    </span>
-                    {active && <Check className="h-4 w-4 text-[#0F6E5D] shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-[11px] text-slate-500">Selections are exact. Selecting a parent never adds its children, and selecting a child never adds its parent. If you select none, the report will include no chapters.</p>
+        {/* ---------------- STEP: GEOGRAPHICAL / SCOPE FILTER ---------------- */}
+        {currentStepConfig.id === "geo" && (
+          <div className="space-y-4">
+            <GeoFilterPanel currentUser={currentUser} {...geoFilters} />
+            {!geoFilters.hasAnyGeoSelection && (
+              <div className="flex items-center gap-2.5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-semibold text-amber-800">
+                Select at least one state, district, or chapter (or include your own entity) to view data.
+              </div>
+            )}
           </div>
         )}
 
@@ -806,7 +794,7 @@ export default function ReportWizard({
               <span className="text-slate-500 ml-auto">{scopeLabel}</span>
             </div>
 
-            {currentUser.level !== OrgLevel.Local && selectedFinancialUnitIds.length === 0 && (
+            {currentUser.level !== OrgLevel.Local && geoFilters.selectedFinancialUnitIds.length === 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs font-semibold text-amber-800">
                 No chapters were selected, so this report is empty.
               </div>

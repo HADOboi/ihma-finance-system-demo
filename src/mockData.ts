@@ -23,34 +23,156 @@ import {
 export const CURRENT_DB_VERSION = "v10_hierarchical_financial_units_2026";
 
 // Organizational hierarchy nodes
+// Organizational hierarchy nodes
 export const STATES: StateNode[] = [
   { id: "kerala", name: "Kerala" },
   { id: "tamil_nadu", name: "Tamil Nadu" },
+  { id: "andhra_pradesh", name: "Andhra Pradesh" },
   { id: "karnataka", name: "Karnataka" },
 ];
 
 export const DISTRICTS: DistrictNode[] = [
   // Kerala districts
+  { id: "thiruvananthapuram", name: "Thiruvananthapuram", stateId: "kerala" },
+  { id: "kollam", name: "Kollam", stateId: "kerala" },
+  { id: "pathanamthitta", name: "Pathanamthitta", stateId: "kerala" },
+  { id: "kottayam", name: "Kottayam", stateId: "kerala" },
+  { id: "thrissur", name: "Thrissur", stateId: "kerala" },
   { id: "ernakulam", name: "Ernakulam", stateId: "kerala" },
+  { id: "malappuram", name: "Malappuram", stateId: "kerala" },
   { id: "kozhikode", name: "Kozhikode", stateId: "kerala" },
+  { id: "wayanad", name: "Wayanad", stateId: "kerala" },
+  { id: "kasaragod", name: "Kasaragod", stateId: "kerala" },
+  { id: "kannur", name: "Kannur", stateId: "kerala" },
+  { id: "palakkad", name: "Palakkad", stateId: "kerala" },
+
   // Tamil Nadu districts
   { id: "chennai", name: "Chennai", stateId: "tamil_nadu" },
+  { id: "coimbatore", name: "Coimbatore", stateId: "tamil_nadu" },
+  { id: "madurai", name: "Madurai", stateId: "tamil_nadu" },
+  { id: "salem", name: "Salem", stateId: "tamil_nadu" },
+  { id: "tiruchirappalli", name: "Tiruchirappalli", stateId: "tamil_nadu" },
+
+  // Andhra Pradesh districts
+  { id: "visakhapatnam", name: "Visakhapatnam", stateId: "andhra_pradesh" },
+  { id: "vijayawada", name: "Vijayawada", stateId: "andhra_pradesh" },
+  { id: "guntur", name: "Guntur", stateId: "andhra_pradesh" },
+  { id: "tirupati", name: "Tirupati", stateId: "andhra_pradesh" },
+
   // Karnataka districts
-  { id: "bangalore", name: "Bangalore Rural", stateId: "karnataka" },
+  { id: "bangalore", name: "Bengaluru", stateId: "karnataka" },
+  { id: "mysuru", name: "Mysuru", stateId: "karnataka" },
+  { id: "mangaluru", name: "Mangaluru", stateId: "karnataka" },
+  { id: "hubballi", name: "Hubballi", stateId: "karnataka" },
+  { id: "belagavi", name: "Belagavi", stateId: "karnataka" },
 ];
 
 export const CHAPTERS: ChapterNode[] = [
-  // Ernakulam chapters
-  { id: "cochin", name: "Cochin Chapter", districtId: "ernakulam" },
-  { id: "aluva", name: "Aluva Chapter", districtId: "ernakulam" },
-  // Kozhikode chapters
-  { id: "calicut_city", name: "Calicut City", districtId: "kozhikode" },
+  // Kerala - Thiruvananthapuram
+  { id: "attingal", name: "Attingal Local Chapter", districtId: "thiruvananthapuram" },
+  { id: "trivandrum_city", name: "Thiruvananthapuram City Local Chapter", districtId: "thiruvananthapuram" },
+
+  // Kerala - Kollam
+  { id: "karunagappally", name: "Karunagappally Local Chapter", districtId: "kollam" },
+
+  // Kerala - Pathanamthitta
+  { id: "pathanamthitta_local", name: "Pathanamthitta Local Chapter", districtId: "pathanamthitta" },
+
+  // Kerala - Kottayam
+  { id: "kottayam_local", name: "Kottayam Local Chapter", districtId: "kottayam" },
+  { id: "kurichy", name: "Kurichy College Local Chapter", districtId: "kottayam" },
+
+  // Kerala - Thrissur
+  { id: "kodungallur", name: "Kodungallur Local Chapter", districtId: "thrissur" },
+
+  // Kerala - Ernakulam
+  { id: "cochin", name: "Cochin Local Chapter", districtId: "ernakulam" },
+  { id: "muvattupuzha", name: "Muvattupuzha Local Chapter", districtId: "ernakulam" },
+  { id: "aluva", name: "Aluva Local Chapter", districtId: "ernakulam" },
+  { id: "kalamassery", name: "Kalamassery Local Chapter", districtId: "ernakulam" },
+  { id: "angamaly", name: "Angamaly Local Chapter", districtId: "ernakulam" },
+
+  // Kerala - Malappuram
+  { id: "manjeri", name: "Manjeri Local Chapter", districtId: "malappuram" },
+  { id: "perinthalmanna", name: "Perinthalmanna Local Chapter", districtId: "malappuram" },
+  { id: "nilambur", name: "Nilambur Local Chapter", districtId: "malappuram" },
+  { id: "ponnani", name: "Ponnani Local Chapter", districtId: "malappuram" },
+  { id: "tirur", name: "Tirur Local Chapter", districtId: "malappuram" },
+  { id: "kondotty", name: "Kondotty Local Chapter", districtId: "malappuram" },
+
+  // Kerala - Kozhikode
+  { id: "calicut_city", name: "Kozhikode City Local Chapter", districtId: "kozhikode" },
+  { id: "calicut_east", name: "Kozhikode East Local Chapter", districtId: "kozhikode" },
+  { id: "ramanattukara", name: "Ramanattukara Local Chapter", districtId: "kozhikode" },
   { id: "vadakara", name: "Vadakara Chapter", districtId: "kozhikode" },
-  // Chennai chapters
-  { id: "chennai_central", name: "Chennai Central", districtId: "chennai" },
-  { id: "chennai_south", name: "Chennai South", districtId: "chennai" },
-  // Bangalore chapters
-  { id: "bangalore_north", name: "Bangalore North", districtId: "bangalore" },
+
+  // Kerala - Wayanad
+  { id: "wayanad_local", name: "Wayanad Local Chapter", districtId: "wayanad" },
+
+  // Kerala - Kasaragod
+  { id: "kasaragod_town", name: "Kasaragod Town Local Chapter", districtId: "kasaragod" },
+
+  // Kerala - Kannur
+  { id: "thalassery", name: "Thalassery Local Chapter", districtId: "kannur" },
+
+  // Kerala - Palakkad
+  { id: "palakkad_local", name: "Palakkad Local Chapter", districtId: "palakkad" },
+
+  // Tamil Nadu - Chennai
+  { id: "chennai_central", name: "Chennai City Local Chapter", districtId: "chennai" },
+  { id: "chennai_south", name: "Ambattur Local Chapter", districtId: "chennai" },
+
+  // Tamil Nadu - Coimbatore
+  { id: "coimbatore_city", name: "Coimbatore City Local Chapter", districtId: "coimbatore" },
+  { id: "pollachi", name: "Pollachi Local Chapter", districtId: "coimbatore" },
+
+  // Tamil Nadu - Madurai
+  { id: "madurai_city", name: "Madurai City Local Chapter", districtId: "madurai" },
+  { id: "melur", name: "Melur Local Chapter", districtId: "madurai" },
+
+  // Tamil Nadu - Salem
+  { id: "salem_city", name: "Salem City Local Chapter", districtId: "salem" },
+  { id: "mettur", name: "Mettur Local Chapter", districtId: "salem" },
+
+  // Tamil Nadu - Tiruchirappalli
+  { id: "trichy_city", name: "Trichy City Local Chapter", districtId: "tiruchirappalli" },
+  { id: "srirangam", name: "Srirangam Local Chapter", districtId: "tiruchirappalli" },
+
+  // Andhra Pradesh - Visakhapatnam
+  { id: "visakhapatnam_city", name: "Visakhapatnam City Local Chapter", districtId: "visakhapatnam" },
+  { id: "gajuwaka", name: "Gajuwaka Local Chapter", districtId: "visakhapatnam" },
+
+  // Andhra Pradesh - Vijayawada
+  { id: "vijayawada_city", name: "Vijayawada City Local Chapter", districtId: "vijayawada" },
+  { id: "mangalagiri", name: "Mangalagiri Local Chapter", districtId: "vijayawada" },
+
+  // Andhra Pradesh - Guntur
+  { id: "guntur_city", name: "Guntur City Local Chapter", districtId: "guntur" },
+  { id: "tenali", name: "Tenali Local Chapter", districtId: "guntur" },
+
+  // Andhra Pradesh - Tirupati
+  { id: "tirupati_city", name: "Tirupati City Local Chapter", districtId: "tirupati" },
+  { id: "chittoor", name: "Chittoor Local Chapter", districtId: "tirupati" },
+
+  // Karnataka - Bengaluru
+  { id: "bangalore_north", name: "Bengaluru City Local Chapter", districtId: "bangalore" },
+  { id: "whitefield", name: "Whitefield Local Chapter", districtId: "bangalore" },
+
+  // Karnataka - Mysuru
+  { id: "mysuru_city", name: "Mysuru City Local Chapter", districtId: "mysuru" },
+  { id: "nanjangud", name: "Nanjangud Local Chapter", districtId: "mysuru" },
+
+  // Karnataka - Mangaluru
+  { id: "mangaluru_city", name: "Mangaluru City Local Chapter", districtId: "mangaluru" },
+  { id: "udupi", name: "Udupi Local Chapter", districtId: "mangaluru" },
+
+  // Karnataka - Hubballi
+  { id: "hubballi_city", name: "Hubballi City Local Chapter", districtId: "hubballi" },
+  { id: "dharwad", name: "Dharwad Local Chapter", districtId: "hubballi" },
+
+  // Karnataka - Belagavi
+  { id: "belagavi_city", name: "Belagavi City Local Chapter", districtId: "belagavi" },
+  { id: "gokak", name: "Gokak Local Chapter", districtId: "belagavi" },
 ];
 
 // Default Account Heads

@@ -22,14 +22,52 @@ export const getFinancialUnitName = (id?: string) => getFinancialUnit(id)?.name 
 const STATE_CODES: Record<string, string> = {
   kerala: "KL",
   tamil_nadu: "TN",
+  andhra_pradesh: "AP",
   karnataka: "KA",
 };
 
 const DISTRICT_CODES: Record<string, string> = {
+  // Kerala
+  thiruvananthapuram: "TVM",
+  trivandrum: "TVM",
+  kollam: "KO",
+  pathanamthitta: "PT",
+  kottayam: "KT",
+  thrissur: "TS",
   ernakulam: "EK",
+  malappuram: "MA",
   kozhikode: "KZ",
-  chennai: "CN",
-  bangalore: "BN",
+  calicut: "KZ",
+  wayanad: "WY",
+  kasaragod: "KS",
+  kannur: "KN",
+  palakkad: "PK",
+
+  // Tamil Nadu
+  chennai: "CH",
+  coimbatore: "CB",
+  madurai: "MD",
+  salem: "SA",
+  tiruchirappalli: "TR",
+  trichy: "TR",
+
+  // Andhra Pradesh
+  visakhapatnam: "VS",
+  vijayawada: "VJ",
+  guntur: "GU",
+  tirupati: "TP",
+
+  // Karnataka
+  bangalore: "BL",
+  bengaluru: "BL",
+  mysuru: "MY",
+  mysore: "MY",
+  mangaluru: "MN",
+  mangalore: "MN",
+  hubballi: "HB",
+  hubli: "HB",
+  belagavi: "BG",
+  belgaum: "BG",
 };
 
 const NATIONAL_CODE = "DL-ND-HQ00";
