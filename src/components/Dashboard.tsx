@@ -91,6 +91,9 @@ interface DashboardProps {
   onEditTransaction: (tx: Transaction) => void;
   onUpdateTransaction?: (tx: Transaction) => void;
   initialReportTab?: ReportTab;
+  onReportTabChange?: (tab: ReportTab) => void;
+  showReportWizard?: boolean;
+  onReportWizardChange?: (show: boolean) => void;
   onBackToHome?: () => void;
 }
 
@@ -227,6 +230,9 @@ export default function Dashboard({
   onEditTransaction,
   onUpdateTransaction,
   initialReportTab,
+  onReportTabChange,
+  showReportWizard: externalShowReportWizard,
+  onReportWizardChange,
   onBackToHome,
 }: DashboardProps) {
   // --- Date Range / Period State ---
@@ -296,6 +302,13 @@ export default function Dashboard({
   const [activeReportTab, setActiveReportTab] = useState<ReportTab>(initialReportTab || "payments");
   const [isReportDropdownOpen, setIsReportDropdownOpen] = useState(false);
 
+  const handleSelectReportTab = (tab: ReportTab) => {
+    setActiveReportTab(tab);
+    if (onReportTabChange) {
+      onReportTabChange(tab);
+    }
+  };
+
   useEffect(() => {
     if (initialReportTab) {
       setActiveReportTab(initialReportTab);
@@ -306,7 +319,16 @@ export default function Dashboard({
   const [showDetailedReports, setShowDetailedReports] = useState<boolean>(false);
 
   // Guided step-by-step report builder
-  const [showReportWizard, setShowReportWizard] = useState<boolean>(false);
+  const [internalShowReportWizard, setInternalShowReportWizard] = useState<boolean>(false);
+  const showReportWizard = externalShowReportWizard !== undefined ? externalShowReportWizard : internalShowReportWizard;
+
+  const handleSetShowReportWizard = (show: boolean) => {
+    if (onReportWizardChange) {
+      onReportWizardChange(show);
+    } else {
+      setInternalShowReportWizard(show);
+    }
+  };
 
   useEffect(() => {
     if (showReportWizard) window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1020,7 +1042,7 @@ export default function Dashboard({
             <button
               type="button"
               id="guided-report-button-top"
-              onClick={() => setShowReportWizard(true)}
+              onClick={() => handleSetShowReportWizard(true)}
               className="inline-flex items-center gap-2 h-9 px-3.5 bg-gradient-to-r from-[#0F6E5D] to-teal-700 hover:from-[#0B5548] hover:to-teal-800 text-white rounded-xl shadow-sm cursor-pointer transition-colors shrink-0"
             >
               <Sparkles className="h-4 w-4 shrink-0" />
@@ -1252,7 +1274,7 @@ export default function Dashboard({
           <button
             type="button"
             id="guided-report-button-legacy"
-            onClick={() => setShowReportWizard(true)}
+            onClick={() => handleSetShowReportWizard(true)}
             className="w-full flex items-center justify-between gap-3 text-left group cursor-pointer"
           >
             <div className="flex items-center gap-3 min-w-0">
@@ -1448,7 +1470,7 @@ export default function Dashboard({
           <button
             type="button"
             id="guided-report-button"
-            onClick={() => setShowReportWizard(true)}
+            onClick={() => handleSetShowReportWizard(true)}
             className="hidden"
             title="Build a report using guided choices"
           >
@@ -1535,7 +1557,7 @@ export default function Dashboard({
                                 key={opt.id}
                                 type="button"
                                 onClick={() => {
-                                  setActiveReportTab(opt.id);
+                                  handleSelectReportTab(opt.id);
                                   setIsReportDropdownOpen(false);
                                 }}
                                 className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
@@ -2460,7 +2482,7 @@ export default function Dashboard({
           aria-modal="true"
           aria-label="Specific report builder"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setShowReportWizard(false);
+            if (event.target === event.currentTarget) handleSetShowReportWizard(false);
           }}
         >
           <div className="w-full max-w-6xl my-3 sm:my-8">
@@ -2472,7 +2494,7 @@ export default function Dashboard({
               bankBalances={bankBalances}
               members={members}
               scopeLabel={scopeLabel}
-              onClose={() => setShowReportWizard(false)}
+              onClose={() => handleSetShowReportWizard(false)}
             />
           </div>
         </div>
