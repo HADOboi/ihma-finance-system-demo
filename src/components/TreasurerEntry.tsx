@@ -1857,15 +1857,13 @@ export default function TreasurerEntry({
                           {/* Guest / Non-registered Option (Top when no search, bottom when searching) */}
                           {!memberSearchTerm && (
                             <div
-                              onClick={() => {
-                                const typedName = memberSearchTerm.trim();
-                                const guestName = formData.collectedById === "GUEST" ? formData.collectedBy : (typedName || formData.collectedBy || "");
+                              onClick={() =>
                                 setFormData({
                                   ...formData,
-                                  collectedBy: guestName,
+                                  collectedBy: formData.collectedById === "GUEST" ? formData.collectedBy : "",
                                   collectedById: "GUEST",
-                                });
-                              }}
+                                })
+                              }
                               className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                                 formData.collectedById === "GUEST"
                                   ? "border-[#0F6E5D] bg-[#E4F1EE]"
@@ -1936,15 +1934,13 @@ export default function TreasurerEntry({
                           {/* Guest / Non-registered Option (Bottom when searching) */}
                           {memberSearchTerm && (
                             <div
-                              onClick={() => {
-                                const typedName = memberSearchTerm.trim();
-                                const guestName = formData.collectedById === "GUEST" ? formData.collectedBy : (typedName || formData.collectedBy || "");
+                              onClick={() =>
                                 setFormData({
                                   ...formData,
-                                  collectedBy: guestName,
+                                  collectedBy: formData.collectedById === "GUEST" ? formData.collectedBy : "",
                                   collectedById: "GUEST",
-                                });
-                              }}
+                                })
+                              }
                               className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                                 formData.collectedById === "GUEST"
                                   ? "border-[#0F6E5D] bg-[#E4F1EE]"
@@ -2013,15 +2009,13 @@ export default function TreasurerEntry({
                           {/* Guest / Non-registered Payer option (Top when no search, bottom when searching) */}
                           {!memberSearchTerm && (
                             <div
-                              onClick={() => {
-                                const typedName = memberSearchTerm.trim();
-                                const guestName = formData.paidByMemberId === "GUEST" ? formData.paidBy : (typedName || formData.paidBy || "");
+                              onClick={() =>
                                 setFormData({
                                   ...formData,
-                                  paidBy: guestName,
+                                  paidBy: formData.paidByMemberId === "GUEST" ? formData.paidBy : "",
                                   paidByMemberId: "GUEST",
-                                });
-                              }}
+                                })
+                              }
                               className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                                 formData.paidByMemberId === "GUEST"
                                   ? "border-[#0F6E5D] bg-[#E4F1EE]"
@@ -2091,15 +2085,13 @@ export default function TreasurerEntry({
                           {/* Guest / Non-registered Payer option (Bottom when searching) */}
                           {memberSearchTerm && (
                             <div
-                              onClick={() => {
-                                const typedName = memberSearchTerm.trim();
-                                const guestName = formData.paidByMemberId === "GUEST" ? formData.paidBy : (typedName || formData.paidBy || "");
+                              onClick={() =>
                                 setFormData({
                                   ...formData,
-                                  paidBy: guestName,
+                                  paidBy: formData.paidByMemberId === "GUEST" ? formData.paidBy : "",
                                   paidByMemberId: "GUEST",
-                                });
-                              }}
+                                })
+                              }
                               className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                                 formData.paidByMemberId === "GUEST"
                                   ? "border-[#0F6E5D] bg-[#E4F1EE]"
@@ -2532,15 +2524,13 @@ export default function TreasurerEntry({
                           {/* Guest / Custom Payer option (Top when no search, bottom when searching) */}
                           {!memberSearchTerm && (
                             <div
-                              onClick={() => {
-                                const typedName = memberSearchTerm.trim();
-                                const guestName = formData.paidByMemberId === "GUEST" ? formData.paidBy : (typedName || formData.paidBy || "");
+                              onClick={() =>
                                 setFormData({
                                   ...formData,
-                                  paidBy: guestName,
+                                  paidBy: formData.paidByMemberId === "GUEST" ? formData.paidBy : "",
                                   paidByMemberId: "GUEST",
-                                });
-                              }}
+                                })
+                              }
                               className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                                 formData.paidByMemberId === "GUEST"
                                   ? "border-amber-600 bg-amber-50"
@@ -2611,15 +2601,13 @@ export default function TreasurerEntry({
                           {/* Guest / Custom Payer option (Bottom when searching) */}
                           {memberSearchTerm && (
                             <div
-                              onClick={() => {
-                                const typedName = memberSearchTerm.trim();
-                                const guestName = formData.paidByMemberId === "GUEST" ? formData.paidBy : (typedName || formData.paidBy || "");
+                              onClick={() =>
                                 setFormData({
                                   ...formData,
-                                  paidBy: guestName,
+                                  paidBy: formData.paidByMemberId === "GUEST" ? formData.paidBy : "",
                                   paidByMemberId: "GUEST",
-                                });
-                              }}
+                                })
+                              }
                               className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                                 formData.paidByMemberId === "GUEST"
                                   ? "border-amber-600 bg-amber-50"
