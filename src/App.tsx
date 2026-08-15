@@ -52,11 +52,36 @@ export default function App() {
   // Active authenticated user
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
+  // Parse state from URL hash or path parameters
+  const parseStateFromUrl = () => {
+    const hash = window.location.hash.replace(/^#\/?/, "");
+    const params = new URLSearchParams(hash ? hash.split("?")[1] || "" : window.location.search);
+    const viewParam = hash.split("?")[0] || params.get("view") || "home";
+    const tabParam = params.get("tab") as ReportTab | null;
+    const wizardParam = params.get("wizard") === "true";
+
+    const validViews: ("home" | "reports" | "admin")[] = ["home", "reports", "admin"];
+    const view = validViews.includes(viewParam as any) ? (viewParam as "home" | "reports" | "admin") : "home";
+
+    const validTabs: ReportTab[] = [
+      "heads", "payments", "receipts", "loans", "members",
+      "entity_types", "assets", "bank_balances", "chapters", "monthly", "yearly", "raw"
+    ];
+    const tab = tabParam && validTabs.includes(tabParam) ? tabParam : "payments";
+
+    return { view, tab, wizard: wizardParam };
+  };
+
+  const initialState = parseStateFromUrl();
+
   // View state: "home" | "reports" | "admin"
-  const [currentView, setCurrentView] = useState<"home" | "reports" | "admin">("home");
+  const [currentView, setCurrentView] = useState<"home" | "reports" | "admin">(initialState.view);
 
   // Selected report tab when navigating to reports
-  const [activeReportTab, setActiveReportTab] = useState<ReportTab>("payments");
+  const [activeReportTab, setActiveReportTab] = useState<ReportTab>(initialState.tab);
+
+  // Report wizard overlay state synced with URL
+  const [showReportWizard, setShowReportWizard] = useState<boolean>(initialState.wizard);
 
   // Active transaction being edited
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -65,6 +90,54 @@ export default function App() {
   useEffect(() => {
     const loaded = loadDatabase();
     setDb(loaded);
+  }, []);
+
+  // Sync window location with app state helper
+  const navigateTo = (view: "home" | "reports" | "admin", tab?: ReportTab, wizard?: boolean, replace = false) => {
+    const targetTab = tab || activeReportTab;
+    const targetWizard = wizard !== undefined ? wizard : (view === "reports" ? showReportWizard : false);
+
+    setCurrentView(view);
+    if (tab) setActiveReportTab(tab);
+    if (wizard !== undefined) setShowReportWizard(wizard);
+
+    let query = `view=${view}`;
+    if (view === "reports") {
+      query += `&tab=${targetTab}`;
+      if (targetWizard) query += `&wizard=true`;
+    }
+    const newHash = `#/${view}?${query}`;
+
+    if (window.location.hash !== newHash) {
+      if (replace) {
+        window.history.replaceState({ view, tab: targetTab, wizard: targetWizard }, "", newHash);
+      } else {
+        window.history.pushState({ view, tab: targetTab, wizard: targetWizard }, "", newHash);
+      }
+    }
+  };
+
+  // Sync history state on popstate (browser back/forward button clicks)
+  useEffect(() => {
+    const handlePopState = () => {
+      const parsed = parseStateFromUrl();
+      setCurrentView(parsed.view);
+      setActiveReportTab(parsed.tab);
+      setShowReportWizard(parsed.wizard);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    // Set initial history state if hash isn't set yet
+    if (!window.location.hash) {
+      window.history.replaceState(
+        { view: initialState.view, tab: initialState.tab, wizard: initialState.wizard },
+        "",
+        `#/${initialState.view}?view=${initialState.view}&tab=${initialState.tab}`
+      );
+    }
+
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   // Sync to database helper
@@ -85,20 +158,17 @@ export default function App() {
   const handleLogin = (user: User) => {
     setCurrentUser(user);
     setEditingTransaction(null);
-    setCurrentView("home");
+    navigateTo("home", undefined, false, true);
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     setEditingTransaction(null);
-    setCurrentView("home");
+    navigateTo("home", undefined, false, true);
   };
 
   const handleOpenReports = (tab?: ReportTab) => {
-    if (tab) {
-      setActiveReportTab(tab);
-    }
-    setCurrentView("reports");
+    navigateTo("reports", tab || activeReportTab, false);
   };
 
   // Manual entries must carry the official chapter code (e.g. KL-EK-CO01) like seeded rows do,
@@ -332,7 +402,7 @@ export default function App() {
           {/* Center View Navigation Tabs */}
           <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/60">
             <button
-              onClick={() => setCurrentView("home")}
+              onClick={() => navigateTo("home")}
               id="nav-home-tab"
               className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 currentView === "home"
@@ -345,7 +415,7 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => setCurrentView("reports")}
+              onClick={() => navigateTo("reports")}
               id="nav-reports-tab"
               className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 currentView === "reports"
@@ -360,7 +430,7 @@ export default function App() {
 
             {currentUser.role === UserRole.Admin && (
               <button
-                onClick={() => setCurrentView("admin")}
+                onClick={() => navigateTo("admin")}
                 id="nav-admin-tab"
                 className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   currentView === "admin"
@@ -617,11 +687,14 @@ export default function App() {
               onDeleteTransaction={handleDeleteTransaction}
               onEditTransaction={(tx) => {
                 setEditingTransaction(tx);
-                setCurrentView("home");
+                navigateTo("home");
               }}
               onUpdateTransaction={handleUpdateTransaction}
               initialReportTab={activeReportTab}
-              onBackToHome={() => setCurrentView("home")}
+              onReportTabChange={(tab) => navigateTo("reports", tab, showReportWizard)}
+              onReportWizardChange={(wizard) => navigateTo("reports", activeReportTab, wizard)}
+              showReportWizard={showReportWizard}
+              onBackToHome={() => navigateTo("home")}
             />
           </div>
         )}
@@ -632,7 +705,7 @@ export default function App() {
             {/* Top Back Navigation Bar */}
             <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-xs">
               <button
-                onClick={() => setCurrentView("home")}
+                onClick={() => navigateTo("home")}
                 className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-all cursor-pointer"
               >
                 <ArrowLeft className="h-4 w-4" />
