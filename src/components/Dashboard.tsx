@@ -330,6 +330,14 @@ export default function Dashboard({
     }
   };
 
+  const handleCloseReportWizard = () => {
+    if (window.location.hash.includes("wizard=true")) {
+      window.history.back();
+    } else {
+      handleSetShowReportWizard(false);
+    }
+  };
+
   useEffect(() => {
     if (showReportWizard) window.scrollTo({ top: 0, behavior: "smooth" });
   }, [showReportWizard]);
@@ -1003,23 +1011,6 @@ export default function Dashboard({
     link.click();
     document.body.removeChild(link);
   };
-
-  if (showReportWizard) {
-    return (
-      <div className="min-h-[70vh] animate-fadeIn">
-        <ReportWizard
-          currentUser={currentUser}
-          accountHeads={accountHeads}
-          transactions={transactions}
-          assets={assets}
-          bankBalances={bankBalances}
-          members={members}
-          scopeLabel={scopeLabel}
-          onClose={() => setShowReportWizard(false)}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6 font-sans">
@@ -2474,7 +2465,7 @@ export default function Dashboard({
       </div>
     </div>
 
-      {/* LOAN REPAYMENT MODAL */}
+      {/* SPECIFIC REPORT WIZARD OVERLAY MODAL */}
       {showReportWizard && (
         <div
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 p-3 sm:p-6"
@@ -2482,7 +2473,7 @@ export default function Dashboard({
           aria-modal="true"
           aria-label="Specific report builder"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) handleSetShowReportWizard(false);
+            if (event.target === event.currentTarget) handleCloseReportWizard();
           }}
         >
           <div className="w-full max-w-6xl my-3 sm:my-8">
@@ -2494,7 +2485,7 @@ export default function Dashboard({
               bankBalances={bankBalances}
               members={members}
               scopeLabel={scopeLabel}
-              onClose={() => handleSetShowReportWizard(false)}
+              onClose={handleCloseReportWizard}
             />
           </div>
         </div>
