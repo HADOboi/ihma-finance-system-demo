@@ -432,8 +432,11 @@ export default function Dashboard({
       return combinedDistricts.filter((d) => stateScope.includes(d.stateId));
     }
     if (currentUser.level === OrgLevel.State) {
-      const userState = currentUser.nodeId?.toLowerCase() || "";
-      return combinedDistricts.filter((d) => d.stateId === currentUser.nodeId || d.stateId === userState);
+      const userState = (currentUser.nodeId || "").toLowerCase();
+      return combinedDistricts.filter((d) => {
+        const dState = (d.stateId || "").toLowerCase();
+        return dState === userState || (userState.includes("kerala") && dState.includes("kerala")) || d.stateId === currentUser.nodeId;
+      });
     }
     return [];
   }, [selectedStates, currentUser, combinedDistricts]);

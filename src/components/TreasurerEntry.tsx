@@ -25,6 +25,7 @@ import {
   Check,
   Search,
   User,
+  UserPlus,
   Calendar,
   CreditCard,
   Building,
@@ -1000,12 +1001,14 @@ export default function TreasurerEntry({
       if (!matchesChapter) return false;
 
       const term = memberSearchTerm.toLowerCase();
+      const mId = m.memberId || m.id || "";
+      const mName = m.memberName || "";
       return (
-        m.memberName.toLowerCase().includes(term) ||
-        m.memberId.toLowerCase().includes(term)
+        mName.toLowerCase().includes(term) ||
+        mId.toLowerCase().includes(term)
       );
     })
-    .sort((a, b) => a.memberName.localeCompare(b.memberName));
+    .sort((a, b) => (a.memberName || "").localeCompare(b.memberName || ""));
 
   // Filter chapters for loan picker (own chapter can never borrow from itself)
   const filteredChapters = chapterDirectory.filter(
