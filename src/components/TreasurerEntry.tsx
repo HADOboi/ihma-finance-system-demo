@@ -70,9 +70,24 @@ interface TreasurerEntryProps {
   onAddAsset?: (asset: Omit<Asset, "id" | "slNo">) => void;
   onAddBankBalance?: (bankBalance: Omit<BankBalance, "id" | "slNo">) => void;
   onOpenReports?: (tab?: ReportTab) => void;
+  activeHomeWizard?: string | null;
+  onHomeWizardChange?: (wizard: string | null) => void;
 }
 
 export type EntryWizardType = "income" | "expense" | "loan" | "loans_dashboard" | "repay_loan" | "member" | "asset" | "bank_balance" | null;
+
+const mapUrlToWizard = (param?: string | null): EntryWizardType => {
+  if (!param) return null;
+  if (param === "fixed_deposit") return "bank_balance";
+  const valid: EntryWizardType[] = ["income", "expense", "loan", "loans_dashboard", "repay_loan", "member", "asset", "bank_balance"];
+  return valid.includes(param as any) ? (param as EntryWizardType) : null;
+};
+
+const mapWizardToUrl = (type: EntryWizardType): string | null => {
+  if (!type) return null;
+  if (type === "bank_balance") return "fixed_deposit";
+  return type;
+};
 
 export default function TreasurerEntry({
   currentUser,
@@ -89,6 +104,8 @@ export default function TreasurerEntry({
   onAddAsset,
   onAddBankBalance,
   onOpenReports,
+  activeHomeWizard,
+  onHomeWizardChange,
 }: TreasurerEntryProps) {
   // Determine chapter details
   const userUnitId = getUserFinancialUnitId(currentUser);
@@ -96,7 +113,7 @@ export default function TreasurerEntry({
   const defaultChapterName = getFinancialUnitName(userUnitId);
 
   // Active Wizard Mode
-  const [activeWizard, setActiveWizard] = useState<EntryWizardType>(null);
+  const [activeWizard, setActiveWizard] = useState<EntryWizardType>(() => mapUrlToWizard(activeHomeWizard));
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
 
@@ -112,6 +129,17 @@ export default function TreasurerEntry({
   const [formData, setFormData] = useState<any>({});
   const [memberSearchTerm, setMemberSearchTerm] = useState<string>("");
   const [qualSearchTerm, setQualSearchTerm] = useState<string>("");
+
+  useEffect(() => {
+    const targetWizard = mapUrlToWizard(activeHomeWizard);
+    if (targetWizard !== activeWizard) {
+      if (targetWizard) {
+        handleStartWizard(targetWizard, false);
+      } else {
+        handleCloseWizard(false);
+      }
+    }
+  }, [activeHomeWizard]);
 
   useEffect(() => {
     if (activeWizard) window.scrollTo({ top: 0, behavior: "smooth" });
@@ -281,11 +309,15 @@ export default function TreasurerEntry({
   const netAmountOf = (data: any) => totalValueOf(data) - depreciationAmountOf(data);
 
   // Reset Wizard State
-  const handleStartWizard = (type: EntryWizardType) => {
+  const handleStartWizard = (type: EntryWizardType, updateUrl = true) => {
     setActiveWizard(type);
     setCurrentStep(0);
     setIsSuccess(false);
     setMemberSearchTerm("");
+
+    if (updateUrl && onHomeWizardChange) {
+      onHomeWizardChange(mapWizardToUrl(type));
+    }
 
     const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -416,13 +448,21 @@ export default function TreasurerEntry({
     }
   };
 
-  const handleCloseWizard = () => {
+  const handleCloseWizard = (updateUrl = true) => {
     setActiveWizard(null);
     setCurrentStep(0);
     setFormData({});
     setIsSuccess(false);
     if (editingTransaction) {
       onCancelEdit();
+    }
+
+    if (updateUrl) {
+      if (window.location.hash.includes("wizard=")) {
+        window.history.back();
+      } else if (onHomeWizardChange) {
+        onHomeWizardChange(null);
+      }
     }
   };
 

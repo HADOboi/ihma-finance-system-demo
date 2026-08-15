@@ -55,13 +55,13 @@ export default function App() {
   // Parse state from URL hash or path parameters
   const parseStateFromUrl = () => {
     const hash = window.location.hash.replace(/^#\/?/, "");
-    const params = new URLSearchParams(hash ? hash.split("?")[1] || "" : window.location.search);
+    const params = new URLSearchParams(hash.includes("?") ? hash.split("?")[1] : window.location.search);
     const viewParam = hash.split("?")[0] || params.get("view") || "home";
     const tabParam = params.get("tab") as ReportTab | null;
-    const wizardParam = params.get("wizard") === "true";
+    const wizardParam = params.get("wizard");
 
-    const validViews: ("home" | "reports" | "admin")[] = ["home", "reports", "admin"];
-    const view = validViews.includes(viewParam as any) ? (viewParam as "home" | "reports" | "admin") : "home";
+    const validViews: ("login" | "home" | "reports" | "admin")[] = ["login", "home", "reports", "admin"];
+    const view = validViews.includes(viewParam as any) ? (viewParam as "login" | "home" | "reports" | "admin") : "home";
 
     const validTabs: ReportTab[] = [
       "heads", "payments", "receipts", "loans", "members",
@@ -74,14 +74,17 @@ export default function App() {
 
   const initialState = parseStateFromUrl();
 
-  // View state: "home" | "reports" | "admin"
-  const [currentView, setCurrentView] = useState<"home" | "reports" | "admin">(initialState.view);
+  // View state: "login" | "home" | "reports" | "admin"
+  const [currentView, setCurrentView] = useState<"login" | "home" | "reports" | "admin">(initialState.view);
 
   // Selected report tab when navigating to reports
   const [activeReportTab, setActiveReportTab] = useState<ReportTab>(initialState.tab);
 
   // Report wizard overlay state synced with URL
-  const [showReportWizard, setShowReportWizard] = useState<boolean>(initialState.wizard);
+  const [showReportWizard, setShowReportWizard] = useState<boolean>(initialState.view === "reports" && initialState.wizard === "true");
+
+  // Home wizard state synced with URL
+  const [homeWizard, setHomeWizard] = useState<string | null>(initialState.view === "home" ? initialState.wizard : null);
 
   // Active transaction being edited
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -93,26 +96,49 @@ export default function App() {
   }, []);
 
   // Sync window location with app state helper
-  const navigateTo = (view: "home" | "reports" | "admin", tab?: ReportTab, wizard?: boolean, replace = false) => {
+  const navigateTo = (
+    view: "login" | "home" | "reports" | "admin",
+    tab?: ReportTab,
+    wizard?: boolean | string | null,
+    replace = false
+  ) => {
     const targetTab = tab || activeReportTab;
-    const targetWizard = wizard !== undefined ? wizard : (view === "reports" ? showReportWizard : false);
 
     setCurrentView(view);
     if (tab) setActiveReportTab(tab);
-    if (wizard !== undefined) setShowReportWizard(wizard);
 
-    let query = `view=${view}`;
+    let targetReportWizard = showReportWizard;
+    let targetHomeWizard = homeWizard;
+
     if (view === "reports") {
-      query += `&tab=${targetTab}`;
-      if (targetWizard) query += `&wizard=true`;
+      targetReportWizard = typeof wizard === "boolean" ? wizard : (wizard === "true");
+      setShowReportWizard(targetReportWizard);
+      setHomeWizard(null);
+    } else if (view === "home") {
+      targetHomeWizard = typeof wizard === "string" ? wizard : null;
+      setHomeWizard(targetHomeWizard);
+      setShowReportWizard(false);
+    } else {
+      setShowReportWizard(false);
+      setHomeWizard(null);
     }
-    const newHash = `#/${view}?${query}`;
+
+    let newHash = `#/${view}`;
+    if (view === "reports") {
+      let query = `view=reports&tab=${targetTab}`;
+      if (targetReportWizard) query += `&wizard=true`;
+      newHash = `#/${view}?${query}`;
+    } else if (view === "home") {
+      if (targetHomeWizard) {
+        newHash = `#/${view}?wizard=${targetHomeWizard}`;
+      }
+    }
 
     if (window.location.hash !== newHash) {
       if (replace) {
-        window.history.replaceState({ view, tab: targetTab, wizard: targetWizard }, "", newHash);
+        window.history.replaceState({ view, tab: targetTab, wizard }, "", newHash);
       } else {
-        window.history.pushState({ view, tab: targetTab, wizard: targetWizard }, "", newHash);
+        window.history.pushState({ view, tab: targetTab, wizard }, "", newHash);
       }
     }
   };
@@ -123,13 +149,18 @@ export default function App() {
       const parsed = parseStateFromUrl();
       setCurrentView(parsed.view);
       setActiveReportTab(parsed.tab);
-      setShowReportWizard(parsed.wizard);
+      setShowReportWizard(parsed.view === "reports" && parsed.wizard === "true");
+      setHomeWizard(parsed.view === "home" ? parsed.wizard : null);
     };
 
     window.addEventListener("popstate", handlePopState);
 
-    // Set initial history state if hash isn't set yet
-    if (!window.location.hash) {
+    // Set initial history state if hash isn't set yet or if user is not logged in
+    if (!currentUser) {
+      if (window.location.hash !== "#/login") {
+        window.history.replaceState({ view: "login" }, "", "#/login");
+      }
+    } else if (!window.location.hash) {
       window.history.replaceState(
         { view: initialState.view, tab: initialState.tab, wizard: initialState.wizard },
         "",
@@ -138,7 +169,7 @@ export default function App() {
     }
 
     return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  }, [currentUser]);
 
   // Sync to database helper
   const syncDatabase = (updated: {
@@ -158,13 +189,13 @@ export default function App() {
   const handleLogin = (user: User) => {
     setCurrentUser(user);
     setEditingTransaction(null);
-    navigateTo("home", undefined, false, true);
+    navigateTo("home", undefined, null, true);
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     setEditingTransaction(null);
-    navigateTo("home", undefined, false, true);
+    navigateTo("login", undefined, null, true);
   };
 
   const handleOpenReports = (tab?: ReportTab) => {
@@ -479,6 +510,8 @@ export default function App() {
                 onAddAsset={handleAddAsset}
                 onAddBankBalance={handleAddBankBalance}
                 onOpenReports={handleOpenReports}
+                activeHomeWizard={homeWizard}
+                onHomeWizardChange={(w) => navigateTo("home", undefined, w)}
               />
             ) : (
               /* Non-Treasurers (President, Secretary, Auditor, Member): Show View Buttons Only */
@@ -687,7 +720,10 @@ export default function App() {
               onDeleteTransaction={handleDeleteTransaction}
               onEditTransaction={(tx) => {
                 setEditingTransaction(tx);
-                navigateTo("home");
+                let wizardType = "income";
+                if (tx.type === HeadType.Expense) wizardType = "expense";
+                if (tx.type === HeadType.Loan) wizardType = "loan";
+                navigateTo("home", undefined, wizardType);
               }}
               onUpdateTransaction={handleUpdateTransaction}
               initialReportTab={activeReportTab}
