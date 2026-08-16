@@ -187,8 +187,9 @@ export interface Transaction {
 
   // Loans specific fields (Sheet 6)
   paidToCategory?: "member" | "chapter";
-  paidToId?: string; // Recipient ID
-  paidToName?: string; // Recipient Name
+  paidToId?: string; // Recipient ID (borrower ID)
+  paidToName?: string; // Recipient Name (borrower name)
+  transactionType?: string; // "Loan" | "Repayment"
   particulars?: string; // Loan details
   amountReturned?: number; // Repaid amount
   loanBalance?: number; // Outstanding balance

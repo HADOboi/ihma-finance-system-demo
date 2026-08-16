@@ -159,6 +159,7 @@ export default function App() {
         paidToId: item.paidToId,
         paidToName: item.paidTo,
         paidTo: item.paidTo,
+        transactionType: item.transactionType || "Loan",
         particulars: item.particulars,
         chapterId: item.chapterIdNo,
         chapterIdInput: item.chapterIdNo,
@@ -166,7 +167,7 @@ export default function App() {
         financialUnitId: item.chapterIdNo,
         description: item.remarksComments,
         remarks: item.remarksComments,
-        createdBy: item.paidTo,
+        createdBy: item.chapterName || item.paidTo,
         createdAt: item.date,
         slNo: item.slNo,
       });

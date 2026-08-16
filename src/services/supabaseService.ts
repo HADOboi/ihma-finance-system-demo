@@ -548,15 +548,15 @@ export function mapModelToDbAsset(model: AssetLiabilityModel): DbAssetLiabilityR
 export function mapDbLoanToModel(row: any): LoanModel {
   return {
     slNo: row.sl_no,
-    chapterIdNo: row.chapter_id_no,
-    chapterName: row.chapter_name,
-    date: row.date,
+    chapterIdNo: row.chapter_id_no || row.chapter_id || "",
+    chapterName: row.chapter_name || "",
+    date: row.date || "",
     voucherNumber: row.voucher_number || undefined,
     paidTo: row.paid_to || row.paid_to_by || "",
     paidToId: row.paid_to_id || row.paid_to_by_id || "",
-    particulars: row.particulars,
+    particulars: row.particulars || "",
     amount: Number(row.amount) || 0,
-    transactionType: row.transaction_type,
+    transactionType: row.transaction_type || "Loan",
     loanBalance: Number(row.loan_balance) || 0,
     loanReturnDate: row.loan_return_date || undefined,
     loanReturnedDate: row.loan_returned_date || undefined,
@@ -576,7 +576,7 @@ export function mapModelToDbLoan(model: LoanModel): DbLoanRow {
     paid_to_id: model.paidToId,
     particulars: model.particulars,
     amount: model.amount,
-    transaction_type: model.transactionType,
+    transaction_type: model.transactionType || "Loan",
     loan_balance: model.loanBalance,
     loan_return_date: model.loanReturnDate || null,
     loan_returned_date: model.loanReturnedDate || null,
@@ -981,13 +981,22 @@ export async function updateAssetLiability(
 /* --- 6. Loan CRUD --- */
 
 export async function fetchLoan(chapterIdNo?: string): Promise<LoanModel[]> {
-  const rows = await fetchRecords<DbLoanRow>(TABLE_NAMES.LOAN, {
-    filterColumn: chapterIdNo ? "chapter_id_no" : undefined,
-    filterValue: chapterIdNo,
-    orderBy: "date",
-    ascending: false,
-  });
-  return rows.map(mapDbLoanToModel);
+  let query = supabase.from(TABLE_NAMES.LOAN).select("*");
+
+  if (chapterIdNo) {
+    query = query.or(`chapter_id_no.eq.${chapterIdNo},paid_to_id.eq.${chapterIdNo}`);
+  }
+
+  query = query.order("date", { ascending: false });
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error(`Supabase error fetching from '${TABLE_NAMES.LOAN}':`, error.message);
+    throw new Error(`Failed to fetch from ${TABLE_NAMES.LOAN}: ${error.message}`);
+  }
+
+  return ((data as DbLoanRow[]) || []).map(mapDbLoanToModel);
 }
 
 export async function insertLoan(loan: LoanModel, user?: User | null): Promise<LoanModel> {
