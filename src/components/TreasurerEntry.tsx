@@ -19,6 +19,16 @@ import type {
 import { CHAPTERS } from "../mockData";
 import { formatDateDMY, formatINR, ensureDoctorPrefix } from "../utils/formatters";
 import { getChapterCode, getFinancialUnitName, getUserFinancialUnitId } from "../utils/financialUnits";
+import {
+  calculateChapterLoanMetrics,
+  getLoanBalance,
+  getTotalRepaidForLoan,
+  getRepaymentsForLoan,
+  isChapterBorrower,
+  isChapterInvolvedInLoan,
+  isChapterLender,
+  isOriginalLoan,
+} from "../utils/loanHelpers";
 import AmountInput from "./AmountInput";
 import {
   ArrowLeft,
@@ -1214,9 +1224,67 @@ export default function TreasurerEntry({
             </button>
           </div>
 
+          {/* 6-Metric Breakdown Summary Cards */}
+          {(() => {
+            const metrics = calculateChapterLoanMetrics(defaultChapterId, defaultChapterName, transactions || []);
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Given / Lender Box */}
+                <div className="bg-white rounded-2xl p-4 border border-indigo-100 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="text-xs font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <ArrowUpRight className="h-4 w-4 text-indigo-600" /> Loans Given (Lender)
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-500">Money Lent Out</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Total Given</span>
+                      <span className="text-sm font-bold text-slate-900">{formatINR(metrics.totalGiven)}</span>
+                    </div>
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Repayments Recv.</span>
+                      <span className="text-sm font-bold text-teal-700">{formatINR(metrics.repaymentsReceived)}</span>
+                    </div>
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Outstanding Recv.</span>
+                      <span className="text-sm font-bold text-amber-800">{formatINR(metrics.outstandingGiven)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Received / Borrower Box */}
+                <div className="bg-white rounded-2xl p-4 border border-purple-100 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="text-xs font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <ArrowDownRight className="h-4 w-4 text-purple-600" /> Loans Received (Borrower)
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-500">Money Borrowed</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Total Received</span>
+                      <span className="text-sm font-bold text-slate-900">{formatINR(metrics.totalReceived)}</span>
+                    </div>
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Repayments Made</span>
+                      <span className="text-sm font-bold text-teal-700">{formatINR(metrics.repaymentsMade)}</span>
+                    </div>
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Outstanding Due</span>
+                      <span className="text-sm font-bold text-rose-800">{formatINR(metrics.outstandingReceived)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Loan List */}
           {(() => {
-            const loanList = (transactions || []).filter((t) => t.type === HeadType.Loan);
+            const loanList = (transactions || []).filter(
+              (t) => t.type === HeadType.Loan && isOriginalLoan(t) && isChapterInvolvedInLoan(t, defaultChapterId, defaultChapterName)
+            );
 
             if (loanList.length === 0) {
               return (
@@ -1229,7 +1297,7 @@ export default function TreasurerEntry({
                       No Internal Loans Logged Yet
                     </h3>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      There are no active or historical chapter internal loan disbursements recorded in this ledger.
+                      There are no active or historical chapter internal loan disbursements recorded for this chapter.
                     </p>
                   </div>
 
@@ -1251,28 +1319,24 @@ export default function TreasurerEntry({
               <div className="space-y-4">
                 <div className="flex justify-between items-center px-1">
                   <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Recorded Chapter Internal Loans ({loanList.length})
+                    Chapter Internal Loans ({loanList.length})
                   </h3>
                   <span className="text-xs text-slate-500 font-medium">
-                    Showing all active & settled internal loans
+                    Showing all active & settled internal loans for {defaultChapterName}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4">
                   {loanList.map((loan) => {
-                    const returnedAmt = loan.amountReturned || 0;
-                    const currentBalance = Math.max(
-                      0,
-                      loan.loanBalance !== undefined
-                        ? loan.loanBalance
-                        : loan.amount - returnedAmt
-                    );
+                    const returnedAmt = getTotalRepaidForLoan(loan, transactions || []);
+                    const currentBalance = getLoanBalance(loan, transactions || []);
                     const isSettled = currentBalance <= 0;
+                    const isLender = isChapterLender(loan, defaultChapterId, defaultChapterName);
 
                     return (
                       <div
                         key={loan.id}
-                        className={`bg-white rounded-2xl p-5 border transition-all shadow-xs ${
+                        className={`bg-white rounded-2xl p-5 border transition-all shadow-xs space-y-3 ${
                           isSettled
                             ? "border-emerald-200 bg-emerald-50/20"
                             : "border-indigo-100 hover:border-indigo-300"
@@ -1282,25 +1346,26 @@ export default function TreasurerEntry({
                           <div className="flex items-center gap-3">
                             <div
                               className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                                isSettled ? "bg-emerald-100 text-emerald-800" : "bg-indigo-100 text-indigo-800"
+                                isSettled ? "bg-emerald-100 text-emerald-800" : isLender ? "bg-indigo-100 text-indigo-800" : "bg-purple-100 text-purple-800"
                               }`}
                             >
                               {isSettled ? <CheckCircle2 className="h-5 w-5" /> : <Briefcase className="h-5 w-5" />}
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <h4 className="font-bold text-sm text-slate-900 font-display">
-                                  {loan.paidToName || loan.paidTo || "Chapter Loan"}
-                                </h4>
-                                {loan.paidToId && (
-                                  <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200">
-                                    {loan.paidToId}
+                                {isLender ? (
+                                  <span className="bg-indigo-100 text-indigo-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-indigo-200">
+                                    Given (Lender)
+                                  </span>
+                                ) : (
+                                  <span className="bg-purple-100 text-purple-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-purple-200">
+                                    Received (Borrower)
                                   </span>
                                 )}
+                                <span className="text-xs font-semibold text-slate-600">
+                                  {loan.particulars || loan.description || "Temporary chapter loan"}
+                                </span>
                               </div>
-                              <p className="text-xs text-slate-500 mt-0.5">
-                                {loan.particulars || loan.description || "Temporary chapter loan"}
-                              </p>
                             </div>
                           </div>
 
@@ -1319,10 +1384,24 @@ export default function TreasurerEntry({
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-3 border-b border-slate-100 text-xs">
+                        {/* From / Lender & To / Borrower Card Header Display */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/80">
+                          <div>
+                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">From / Lender</span>
+                            <span className="font-bold text-slate-900 text-xs block">{loan.chapterNameInput || loan.chapterName}</span>
+                            <span className="font-mono text-[11px] font-bold text-slate-600 block">{loan.chapterIdInput || loan.chapterId}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">To / Borrower</span>
+                            <span className="font-bold text-slate-900 text-xs block">{loan.paidToName || loan.paidTo || "Borrower Chapter"}</span>
+                            <span className="font-mono text-[11px] font-bold text-slate-600 block">{loan.paidToId || "—"}</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-2 text-xs">
                           <div>
                             <span className="text-slate-400 text-[10px] uppercase font-bold block">
-                              Loan Amount
+                              Loan Principal
                             </span>
                             <span className="font-bold text-slate-900 text-sm">
                               {formatINR(loan.amount)}
@@ -1331,7 +1410,7 @@ export default function TreasurerEntry({
 
                           <div>
                             <span className="text-slate-400 text-[10px] uppercase font-bold block">
-                              Amount Returned
+                              Total Repaid
                             </span>
                             <span className="font-bold text-teal-700 text-sm">
                               {formatINR(returnedAmt)}
@@ -1340,7 +1419,7 @@ export default function TreasurerEntry({
 
                           <div>
                             <span className="text-slate-400 text-[10px] uppercase font-bold block">
-                              Remaining Balance
+                              Outstanding Balance
                             </span>
                             <span className={`font-bold text-sm ${isSettled ? "text-emerald-700" : "text-amber-800"}`}>
                               {formatINR(currentBalance)}
@@ -1357,20 +1436,11 @@ export default function TreasurerEntry({
                           </div>
                         </div>
 
-                        <div className="pt-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
+                        <div className="pt-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs border-t border-slate-100">
                           <div className="text-slate-500 text-[11px] space-y-0.5">
                             <p>
-                              <strong className="text-slate-700">Loan Date:</strong> {loan.date ? formatDateDMY(loan.date) : "—"} • <strong className="text-slate-700">Voucher #:</strong> {loan.voucherNumber || "LV-N/A"} • <strong className="text-slate-700">Out Mode:</strong> {loan.paymentMode || "Cash"}
-                              {returnedAmt > 0 && (
-                                <> • <strong className="text-emerald-700">Repay Mode:</strong> {loan.repaymentPaymentMode || loan.paymentMode || "Cash"}</>
-                              )}
+                              <strong className="text-slate-700">Disbursement Date:</strong> {loan.date ? formatDateDMY(loan.date) : "—"} • <strong className="text-slate-700">Voucher #:</strong> {loan.voucherNumber || "LV-N/A"} • <strong className="text-slate-700">Mode:</strong> {loan.paymentMode || "Cash"}
                             </p>
-                            {isSettled && loan.loanReturnedDate && (
-                              <p className="text-emerald-800 font-semibold flex items-center gap-1">
-                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                                Loan Returned Date: {formatDateDMY(loan.loanReturnedDate)}
-                              </p>
-                            )}
                             {loan.remarks && (
                               <p className="italic text-slate-600">
                                 Remarks: {loan.remarks}
@@ -1381,7 +1451,7 @@ export default function TreasurerEntry({
                           <div className="shrink-0 w-full sm:w-auto">
                             {isSettled ? (
                               <div className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-[11px] font-semibold text-center border border-slate-200 cursor-not-allowed">
-                                Loan fully returned - Not editable
+                                Loan fully returned
                               </div>
                             ) : (
                               <button
@@ -1416,7 +1486,7 @@ export default function TreasurerEntry({
       {activeWizard === "repay_loan" && selectedLoan && (
         <div className="bg-white rounded-2xl shadow-md border border-slate-200/80 overflow-hidden space-y-0 animate-fadeIn">
           {/* Header */}
-          <div className="p-6 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex justify-between items-center">
+          <div className="p-6 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <button
@@ -1430,24 +1500,17 @@ export default function TreasurerEntry({
               <h3 className="text-xl font-bold font-display text-white">
                 Record Loan Repayment
               </h3>
-              <p className="text-xs text-indigo-200 mt-0.5">
-                Paid To: <span className="font-bold text-white">{selectedLoan.paidToName || selectedLoan.paidTo}</span> ({selectedLoan.paidToId || "Chapter"})
+              <p className="text-xs text-indigo-200 mt-1">
+                <strong className="text-white">From / Lender:</strong> {selectedLoan.chapterNameInput || selectedLoan.chapterName} ({selectedLoan.chapterIdInput || selectedLoan.chapterId}) • <strong className="text-white">To / Borrower:</strong> {selectedLoan.paidToName || selectedLoan.paidTo} ({selectedLoan.paidToId || "—"})
               </p>
             </div>
 
-            <div className="text-right bg-white/10 px-3 py-1.5 rounded-xl border border-white/20">
+            <div className="text-right bg-white/10 px-3 py-1.5 rounded-xl border border-white/20 shrink-0">
               <span className="text-[10px] text-indigo-200 uppercase font-bold block">
-                Current Balance
+                Current Outstanding Balance
               </span>
               <span className="text-sm font-bold text-amber-300">
-                {formatINR(
-                  Math.max(
-                    0,
-                    selectedLoan.loanBalance !== undefined
-                      ? selectedLoan.loanBalance
-                      : selectedLoan.amount - (selectedLoan.amountReturned || 0)
-                  )
-                )}
+                {formatINR(getLoanBalance(selectedLoan, transactions || []))}
               </span>
             </div>
           </div>
@@ -1462,20 +1525,13 @@ export default function TreasurerEntry({
                     <span className="font-bold text-slate-900">{formatINR(selectedLoan.amount)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-600 font-medium">Previously Returned:</span>
-                    <span className="font-bold text-teal-700">{formatINR(selectedLoan.amountReturned || 0)}</span>
+                    <span className="text-slate-600 font-medium font-semibold">Previously Returned:</span>
+                    <span className="font-bold text-teal-700">{formatINR(getTotalRepaidForLoan(selectedLoan, transactions || []))}</span>
                   </div>
                   <div className="flex justify-between pt-1 border-t border-indigo-200/60 font-bold">
                     <span className="text-indigo-900">Current Outstanding Balance:</span>
                     <span className="text-amber-800 text-sm">
-                      {formatINR(
-                        Math.max(
-                          0,
-                          selectedLoan.loanBalance !== undefined
-                            ? selectedLoan.loanBalance
-                            : selectedLoan.amount - (selectedLoan.amountReturned || 0)
-                        )
-                      )}
+                      {formatINR(getLoanBalance(selectedLoan, transactions || []))}
                     </span>
                   </div>
                 </div>
@@ -1497,12 +1553,7 @@ export default function TreasurerEntry({
 
                 {/* Quick Presets */}
                 {(() => {
-                  const currentBal = Math.max(
-                    0,
-                    selectedLoan.loanBalance !== undefined
-                      ? selectedLoan.loanBalance
-                      : selectedLoan.amount - (selectedLoan.amountReturned || 0)
-                  );
+                  const currentBal = getLoanBalance(selectedLoan, transactions || []);
                   return (
                     <div className="space-y-1.5">
                       <span className="text-[11px] font-semibold text-slate-500">Quick Presets:</span>
@@ -1600,18 +1651,22 @@ export default function TreasurerEntry({
             {repaymentStep === 1 && (
               <div className="space-y-4">
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
-                  {/* 1. Loan Date */}
-                  <div className="flex justify-between py-1.5 border-b border-slate-200">
-                    <span className="text-slate-500 font-semibold">Loan Date:</span>
-                    <span className="font-bold text-slate-900">{selectedLoan.date ? formatDateDMY(selectedLoan.date) : "—"}</span>
+                  {/* From / Lender & To / Borrower */}
+                  <div className="grid grid-cols-2 gap-2 py-1.5 border-b border-slate-200">
+                    <div>
+                      <span className="text-slate-500 font-semibold block">From / Lender:</span>
+                      <span className="font-bold text-slate-900">{selectedLoan.chapterNameInput || selectedLoan.chapterName} ({selectedLoan.chapterIdInput || selectedLoan.chapterId})</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 font-semibold block">To / Borrower:</span>
+                      <span className="font-bold text-slate-900">{selectedLoan.paidToName || selectedLoan.paidTo} ({selectedLoan.paidToId || "—"})</span>
+                    </div>
                   </div>
 
-                  {/* 2. Paid To */}
+                  {/* 1. Loan Date */}
                   <div className="flex justify-between py-1.5 border-b border-slate-200">
-                    <span className="text-slate-500 font-semibold">Paid To (Chapter):</span>
-                    <span className="font-bold text-slate-900">
-                      {selectedLoan.paidToName || selectedLoan.paidTo} ({selectedLoan.paidToId || "Chapter"})
-                    </span>
+                    <span className="text-slate-500 font-semibold">Loan Disbursement Date:</span>
+                    <span className="font-bold text-slate-900">{selectedLoan.date ? formatDateDMY(selectedLoan.date) : "—"}</span>
                   </div>
 
                   {/* 3. Amount */}
@@ -1622,9 +1677,9 @@ export default function TreasurerEntry({
 
                   {/* 4. Amount Returned */}
                   <div className="flex justify-between py-1.5 border-b border-slate-200">
-                    <span className="text-slate-500 font-semibold">Total Amount Returned:</span>
+                    <span className="text-slate-500 font-semibold">Total Repaid After Entry:</span>
                     <span className="font-bold text-teal-800 text-sm">
-                      {formatINR((selectedLoan.amountReturned || 0) + repaymentAmount)}
+                      {formatINR(getTotalRepaidForLoan(selectedLoan, transactions || []) + repaymentAmount)}
                     </span>
                   </div>
 
@@ -1654,42 +1709,19 @@ export default function TreasurerEntry({
 
                   {/* 5. Loan Balance */}
                   {(() => {
+                    const currentTotalRepaid = getTotalRepaidForLoan(selectedLoan, transactions || []);
                     const newBal = Math.max(
                       0,
-                      selectedLoan.amount - ((selectedLoan.amountReturned || 0) + repaymentAmount)
+                      selectedLoan.amount - (currentTotalRepaid + repaymentAmount)
                     );
                     return (
                       <div className="flex justify-between py-1.5 border-b border-slate-200">
-                        <span className="text-slate-500 font-semibold">Loan Balance:</span>
+                        <span className="text-slate-500 font-semibold">New Outstanding Balance:</span>
                         <span className={`font-bold text-sm ${newBal === 0 ? "text-emerald-700" : "text-amber-800"}`}>
                           {formatINR(newBal)}
                         </span>
                       </div>
                     );
-                  })()}
-
-                  {/* 6. Loan Return Date */}
-                  <div className="flex justify-between py-1.5 border-b border-slate-200">
-                    <span className="text-slate-500 font-semibold">Loan Return Date:</span>
-                    <span className="font-bold text-slate-900">{selectedLoan.loanReturnDate ? formatDateDMY(selectedLoan.loanReturnDate) : "Not set"}</span>
-                  </div>
-
-                  {/* 7. Loan Returned Date - ONLY SHOWS WHEN FULLY LOAN IS RETURNED */}
-                  {(() => {
-                    const newBal = Math.max(
-                      0,
-                      selectedLoan.amount - ((selectedLoan.amountReturned || 0) + repaymentAmount)
-                    );
-                    const todayStr = new Date().toISOString().slice(0, 10);
-                    if (newBal === 0) {
-                      return (
-                        <div className="flex justify-between py-1.5 border-b border-slate-200 bg-emerald-50 px-2 rounded-lg text-emerald-950 font-bold">
-                          <span>Loan Returned Date:</span>
-                          <span>{formatDateDMY(todayStr)} (Fully Repaid)</span>
-                        </div>
-                      );
-                    }
-                    return null;
                   })()}
 
                   {/* 8. Remarks */}
@@ -1729,13 +1761,7 @@ export default function TreasurerEntry({
                 disabled={
                   !repaymentAmount ||
                   repaymentAmount <= 0 ||
-                  repaymentAmount >
-                    Math.max(
-                      0,
-                      selectedLoan.loanBalance !== undefined
-                        ? selectedLoan.loanBalance
-                        : selectedLoan.amount - (selectedLoan.amountReturned || 0)
-                    )
+                  repaymentAmount > getLoanBalance(selectedLoan, transactions || [])
                 }
                 onClick={() => setRepaymentStep(1)}
                 className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all text-xs shadow-sm flex items-center gap-1.5"
@@ -1747,12 +1773,35 @@ export default function TreasurerEntry({
               <button
                 onClick={() => {
                   const todayStr = new Date().toISOString().slice(0, 10);
-                  const prevReturned = selectedLoan.amountReturned || 0;
-                  const newReturned = prevReturned + repaymentAmount;
+                  const currentRepaid = getTotalRepaidForLoan(selectedLoan, transactions || []);
+                  const newReturned = currentRepaid + repaymentAmount;
                   const newBal = Math.max(0, selectedLoan.amount - newReturned);
                   const returnedDate = newBal <= 0 ? repaymentDate : selectedLoan.loanReturnedDate;
 
-                  const updatedLoan: Transaction = {
+                  // 1. Create a separate Repayment transaction
+                  const repaymentTx: Omit<Transaction, "id" | "createdBy" | "createdAt" | "chapterId" | "headName"> = {
+                    date: repaymentDate || todayStr,
+                    type: HeadType.Loan,
+                    headId: "loan",
+                    transactionType: "Repayment",
+                    amount: repaymentAmount,
+                    voucherNumber: selectedLoan.voucherNumber || `LV-${Date.now()}`,
+                    chapterIdInput: selectedLoan.chapterIdInput || selectedLoan.chapterId, // Lender chapter ID
+                    chapterNameInput: selectedLoan.chapterNameInput || selectedLoan.chapterName, // Lender chapter Name
+                    paidToCategory: "chapter" as const,
+                    paidTo: selectedLoan.paidToName || selectedLoan.paidTo, // Borrower chapter Name
+                    paidToId: selectedLoan.paidToId, // Borrower chapter ID
+                    paidToName: selectedLoan.paidToName || selectedLoan.paidTo,
+                    particulars: `Repayment for loan ${selectedLoan.voucherNumber || selectedLoan.id}`,
+                    paymentMode: repaymentMode,
+                    repaymentPaymentMode: repaymentMode,
+                    repaymentDate: repaymentDate,
+                    remarks: repaymentRemarks || `Repayment received for ${selectedLoan.voucherNumber || selectedLoan.id}`,
+                    description: repaymentRemarks || `Repayment for loan ${selectedLoan.voucherNumber || selectedLoan.id}`,
+                  };
+
+                  // 2. Also update parent loan
+                  const updatedParentLoan: Transaction = {
                     ...selectedLoan,
                     amountReturned: newReturned,
                     loanBalance: newBal,
@@ -1765,7 +1814,8 @@ export default function TreasurerEntry({
                       : `${selectedLoan.remarks ? selectedLoan.remarks + " | " : ""}Repaid ₹${repaymentAmount} via ${repaymentMode} on ${formatDateDMY(repaymentDate)}`,
                   };
 
-                  onUpdateTransaction(updatedLoan);
+                  onAddTransaction(repaymentTx);
+                  onUpdateTransaction(updatedParentLoan);
                   setActiveWizard("loans_dashboard");
                 }}
                 className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl cursor-pointer transition-all text-xs shadow-md flex items-center gap-1.5"

@@ -28,6 +28,16 @@ import { formatDateDMY, formatINR } from "../utils/formatters";
 import { getReadableFinancialUnitIds, getUserFinancialUnitId } from "../utils/financialUnits";
 import { isEntityInScope } from "../utils/orgResolution";
 import { useGeoFilters } from "../hooks/useGeoFilters";
+import {
+  calculateChapterLoanMetrics,
+  getLoanBalance,
+  getTotalRepaidForLoan,
+  getRepaymentsForLoan,
+  isChapterBorrower,
+  isChapterInvolvedInLoan,
+  isChapterLender,
+  isOriginalLoan,
+} from "../utils/loanHelpers";
 import GeoFilterPanel from "./GeoFilterPanel";
 import ReportWizard from "./ReportWizard";
 import {
@@ -650,8 +660,19 @@ export default function Dashboard({
   }, [detailedTransactions, selectedIncomeHeads]);
 
   const filteredLoans = useMemo(() => {
-    return detailedTransactions.filter(tx => tx.type === HeadType.Loan);
-  }, [detailedTransactions]);
+    return detailedTransactions.filter((tx) => {
+      if (tx.type !== HeadType.Loan || !isOriginalLoan(tx)) return false;
+      const lenderId = tx.chapterIdInput || tx.chapterId;
+      const borrowerId = tx.paidToId;
+      const lenderName = tx.chapterNameInput || tx.chapterName;
+      const borrowerName = tx.paidToName || tx.paidTo;
+
+      const isLenderInScope = isEntityInScope(lenderId, selectedFinancialUnitIds) || isEntityInScope(lenderName, selectedFinancialUnitIds);
+      const isBorrowerInScope = isEntityInScope(borrowerId, selectedFinancialUnitIds) || isEntityInScope(borrowerName, selectedFinancialUnitIds);
+
+      return isLenderInScope || isBorrowerInScope;
+    });
+  }, [detailedTransactions, selectedFinancialUnitIds]);
 
   // Detailed directory records use the displayed chapter ID (for example,
   // "KL-EK-CO01"), while transactions use the internal ID ("cochin").
@@ -759,10 +780,11 @@ export default function Dashboard({
         csvContent += `${idx + 1},"${tx.chapterIdInput || tx.chapterId}","${tx.chapterNameInput || tx.chapterId}","${tx.date}","${tx.collectedBy || ""}","${tx.paidBy || ""}","${tx.headName}",${tx.offeredAmount || tx.amount},${tx.paidAmount || tx.amount},${tx.balanceAmount || 0},"${tx.paymentMode || "Bank"}","${(tx.remarks || tx.description || "").replace(/"/g, '""')}","${tx.paidByMemberId || ""}"\n`;
       });
     } else if (activeReportTab === "loans") {
-      csvContent += "Sl. No.,Chapter ID No.,Chapter Name,Date,Paid To,Paid To ID,Member/Chapter Name,Particulars,Amount,Amount Returned,Loan Balance,Loan Return Date,Loan Returned Date,Remarks\n";
+      csvContent += "Sl. No.,Voucher No.,From/Lender Name,From/Lender ID,To/Borrower Name,To/Borrower ID,Date,Particulars,Amount,Amount Returned,Loan Balance,Loan Return Date,Remarks\n";
       filteredLoans.forEach((tx, idx) => {
-        const bal = tx.loanBalance !== undefined ? tx.loanBalance : (tx.amount - (tx.amountReturned || 0));
-        csvContent += `${idx + 1},"${tx.chapterIdInput || tx.chapterId}","${tx.chapterNameInput || tx.chapterId}","${tx.date}","${tx.paidTo || ""}","${tx.paidToId || ""}","${tx.paidToName || ""}","${(tx.particulars || tx.description || "").replace(/"/g, '""')}",${tx.amount},${tx.amountReturned || 0},${bal},"${tx.loanReturnDate || ""}","${tx.loanReturnedDate || ""}","${(tx.remarks || "").replace(/"/g, '""')}"\n`;
+        const repaid = getTotalRepaidForLoan(tx, transactions);
+        const bal = getLoanBalance(tx, transactions);
+        csvContent += `${idx + 1},"${tx.voucherNumber || ""}","${tx.chapterNameInput || tx.chapterName || ""}","${tx.chapterIdInput || tx.chapterId || ""}","${tx.paidToName || tx.paidTo || ""}","${tx.paidToId || ""}","${tx.date}","${(tx.particulars || tx.description || "").replace(/"/g, '""')}",${tx.amount},${repaid},${bal},"${tx.loanReturnDate || ""}","${(tx.remarks || "").replace(/"/g, '""')}"\n`;
       });
     } else if (activeReportTab === "members") {
       csvContent += "Sl. No.,Member ID Number,Member Name,Chapter ID No.,Chapter Name,Member Qualification,Membership Type,Membership Date,Expiry Date,Membership Status,Mobile Number,WhatsApp Number,Email Address,Office/Clinic Number\n";
@@ -1524,107 +1546,58 @@ export default function Dashboard({
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-wider">
                       <th className="py-2.5 px-3">Sl. No.</th>
                       <th className="py-2.5 px-3">Voucher No.</th>
-                      <th className="py-2.5 px-3">Chapter ID</th>
-                      <th className="py-2.5 px-3">Chapter Name</th>
+                      <th className="py-2.5 px-3">From / Lender</th>
+                      <th className="py-2.5 px-3">To / Borrower</th>
                       <th className="py-2.5 px-3">Date</th>
-                      <th className="py-2.5 px-3">Paid To</th>
-                      <th className="py-2.5 px-3">Paid To ID</th>
                       <th className="py-2.5 px-3">Particulars</th>
                       <th className="py-2.5 px-3">Mode</th>
-                      <th className="py-2.5 px-3 text-right">Loan Amount (₹)</th>
+                      <th className="py-2.5 px-3 text-right">Loan Principal (₹)</th>
                       <th className="py-2.5 px-3 text-right">Returned (₹)</th>
                       <th className="py-2.5 px-3 text-right">Loan Balance (₹)</th>
                       <th className="py-2.5 px-3">Target Return Date</th>
                       <th className="py-2.5 px-3">Remarks</th>
-                      {false && (
-                        <th className="py-2.5 px-3 text-center">Actions</th>
-                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     {filteredLoans.length === 0 ? (
                       <tr>
-                        <td colSpan={14} className="py-8 text-center text-slate-400">
+                        <td colSpan={12} className="py-8 text-center text-slate-400">
                           No active loan records match the selected filters.
                         </td>
                       </tr>
                     ) : (
                       filteredLoans.map((tx, idx) => {
-                        const chapterName = CHAPTERS.find((c) => c.id === tx.chapterId)?.name || tx.chapterIdInput || tx.chapterId;
-                        const isEditable = currentUser.role === "Admin" || (currentUser.role === "Treasurer" && tx.chapterId === currentUser.nodeId);
-                        const bal = tx.loanBalance !== undefined ? tx.loanBalance : (tx.amount - (tx.amountReturned || 0));
+                        const lenderName = CHAPTERS.find((c) => c.id === tx.chapterId)?.name || tx.chapterNameInput || tx.chapterName || tx.chapterId;
+                        const lenderId = tx.chapterIdInput || tx.chapterId;
+                        const borrowerName = tx.paidToName || tx.paidTo || "—";
+                        const borrowerId = tx.paidToId || "—";
+                        const repaid = getTotalRepaidForLoan(tx, transactions);
+                        const bal = getLoanBalance(tx, transactions);
 
                         return (
                           <tr key={tx.id} className="hover:bg-slate-50/40 transition-colors">
                             <td className="py-3 px-3 font-mono font-bold text-slate-500">{idx + 1}</td>
                             <td className="py-3 px-3 font-mono text-slate-700 font-semibold">{tx.voucherNumber || "—"}</td>
-                            <td className="py-3 px-3 font-mono text-slate-600">{tx.chapterIdInput || tx.chapterId}</td>
-                            <td className="py-3 px-3 font-semibold text-slate-800">{chapterName}</td>
+                            <td className="py-3 px-3 font-semibold text-slate-800">
+                              <div>{lenderName}</div>
+                              <span className="font-mono text-[10px] text-slate-500 font-normal">{lenderId}</span>
+                            </td>
+                            <td className="py-3 px-3 font-semibold text-slate-800">
+                              <div>{borrowerName}</div>
+                              <span className="font-mono text-[10px] text-slate-500 font-normal">{borrowerId}</span>
+                            </td>
                             <td className="py-3 px-3 font-mono text-slate-600 whitespace-nowrap">{tx.date ? formatDateDMY(tx.date) : "—"}</td>
-                            <td className="py-3 px-3 font-semibold text-slate-800">{tx.paidTo || tx.paidToName || "—"}</td>
-                            <td className="py-3 px-3 font-mono font-bold text-slate-700">{tx.paidToId || "—"}</td>
                             <td className="py-3 px-3 text-slate-600 max-w-xs truncate" title={tx.particulars || tx.description}>{tx.particulars || tx.description || "—"}</td>
                             <td className="py-3 px-3">
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-full border border-slate-200 shrink-0 whitespace-nowrap">
-                                  Out: {tx.paymentMode || "Cash"}
-                                </span>
-                                {tx.amountReturned && tx.amountReturned > 0 ? (
-                                  <span className="text-[10px] bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200 shrink-0 whitespace-nowrap">
-                                    In: {tx.repaymentPaymentMode || tx.paymentMode || "Cash"}
-                                  </span>
-                                ) : null}
-                              </div>
+                              <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-full border border-slate-200 shrink-0 whitespace-nowrap">
+                                {tx.paymentMode || "Cash"}
+                              </span>
                             </td>
                             <td className="py-3 px-3 text-right font-bold text-slate-900">{formatINR(tx.amount)}</td>
-                            <td className="py-3 px-3 text-right font-medium text-emerald-700">{formatINR((tx.amountReturned || 0))}</td>
+                            <td className="py-3 px-3 text-right font-medium text-emerald-700">{formatINR(repaid)}</td>
                             <td className="py-3 px-3 text-right font-black text-indigo-900">{formatINR(bal)}</td>
                             <td className="py-3 px-3 font-mono text-slate-600 whitespace-nowrap">{tx.loanReturnDate ? formatDateDMY(tx.loanReturnDate) : "—"}</td>
                             <td className="py-3 px-3 text-slate-500 max-w-xs truncate">{tx.remarks || "—"}</td>
-                            {false && (
-                              <td className="py-3 px-3 text-center">
-                                {isEditable ? (
-                                  <div className="flex items-center justify-center gap-1.5">
-                                    {bal > 0 && (
-                                      <button
-                                        onClick={() => {
-                                          setRepayModalTx(tx);
-                                          setRepaymentAmount(bal);
-                                          setRepaymentMode("Cash");
-                                          setRepaymentDate(new Date().toISOString().slice(0, 10));
-                                          setRepaymentRemarks("");
-                                        }}
-                                        className="px-2 py-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg cursor-pointer transition-all flex items-center gap-1 shrink-0"
-                                        title="Log Loan Repayment"
-                                      >
-                                        <ArrowDownRight className="h-3 w-3 text-emerald-600" />
-                                        <span>Repay</span>
-                                      </button>
-                                    )}
-                                    <button
-                                      onClick={() => onEditTransaction(tx)}
-                                      className="p-1 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-md cursor-pointer transition-all"
-                                      title="Edit Loan"
-                                    >
-                                      <Edit3 className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        if (confirm("Delete this loan record?")) {
-                                          onDeleteTransaction(tx.id);
-                                        }
-                                      }}
-                                      className="p-1 text-slate-400 hover:text-red-700 hover:bg-red-50 rounded-md cursor-pointer transition-all"
-                                      title="Delete Loan"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <span className="text-[10px] text-slate-400 italic">Locked</span>
-                                )}
-                              </td>
-                            )}
                           </tr>
                         );
                       })

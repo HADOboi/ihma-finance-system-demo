@@ -20,6 +20,12 @@ import { FINANCIAL_UNITS, getReadableFinancialUnitIds, getUserFinancialUnitId } 
 import { formatDateDMY, formatINR } from "../utils/formatters";
 import { isEntityInScope } from "../utils/orgResolution";
 import { useGeoFilters } from "../hooks/useGeoFilters";
+import {
+  getLoanBalance,
+  getTotalRepaidForLoan,
+  isLoanRepayment,
+  isOriginalLoan,
+} from "../utils/loanHelpers";
 import GeoFilterPanel from "./GeoFilterPanel";
 import {
   ArrowLeft,
@@ -232,31 +238,50 @@ export default function ReportWizard({
     }
 
     if (sections.includes("loans")) {
-      const rows = ledgerRows.filter((tx) => tx.type === HeadType.Loan);
+      const rows = transactions.filter((tx) => {
+        if (tx.type !== HeadType.Loan) return false;
+        if (!inWindow(tx.date)) return false;
+        const lenderInScope = inScope(tx.financialUnitId || tx.chapterIdInput || tx.chapterId);
+        const borrowerInScope = inScope(tx.paidToId);
+        return lenderInScope || borrowerInScope;
+      });
+
+      const originalLoansInScope = rows.filter(isOriginalLoan);
+      const totalDisbursed = originalLoansInScope.reduce((sum, tx) => sum + tx.amount, 0);
+      const totalRepaid = originalLoansInScope.reduce((sum, tx) => sum + getTotalRepaidForLoan(tx, transactions), 0);
+      const totalOutstanding = originalLoansInScope.reduce((sum, tx) => sum + getLoanBalance(tx, transactions), 0);
+
       blocks.push({
         key: "loans",
         title: "Internal Loans",
         rows,
         totals: [
-          { label: "Total disbursed", value: rows.reduce((sum, tx) => sum + tx.amount, 0) },
-          { label: "Total repaid", value: rows.reduce((sum, tx) => sum + (tx.amountReturned ?? 0), 0) },
-          {
-            label: "Outstanding",
-            value: rows.reduce((sum, tx) => sum + (tx.loanBalance ?? tx.amount - (tx.amountReturned ?? 0)), 0),
-          },
+          { label: "Total principal disbursed", value: totalDisbursed },
+          { label: "Total repaid", value: totalRepaid },
+          { label: "Outstanding balance", value: totalOutstanding },
         ],
         columns: [
           { label: "Sl. No.", value: (_r, i) => i + 1 },
           { label: "Date", value: (r) => formatDateDMY(r.date) },
-          { label: "Chapter", value: (r) => r.chapterNameInput || r.chapterId },
-          { label: "Paid To", value: (r) => r.paidToName || r.paidTo || "—" },
+          {
+            label: "Direction",
+            value: (r) => {
+              const isLender = inScope(r.financialUnitId || r.chapterIdInput || r.chapterId);
+              if (isOriginalLoan(r)) {
+                return isLender ? "Loan Given (Lender)" : "Loan Received (Borrower)";
+              } else {
+                return isLender ? "Repayment Received" : "Repayment Made";
+              }
+            },
+          },
+          { label: "From / Lender", value: (r) => `${r.chapterNameInput || r.chapterName || "Lender"} (${r.chapterIdInput || r.chapterId})` },
+          { label: "To / Borrower", value: (r) => `${r.paidToName || r.paidTo || "Borrower"} (${r.paidToId || "—"})` },
           { label: "Particulars", value: (r) => r.particulars || r.description || "—" },
           { label: "Mode", value: (r) => r.paymentMode || "—" },
-          { label: "Loan Amount (₹)", money: true, value: (r) => r.amount },
-          { label: "Returned (₹)", money: true, value: (r) => r.amountReturned ?? 0 },
-          { label: "Balance (₹)", money: true, value: (r) => r.loanBalance ?? r.amount - (r.amountReturned ?? 0) },
+          { label: "Amount (₹)", money: true, value: (r) => r.amount },
+          { label: "Returned (₹)", money: true, value: (r) => isOriginalLoan(r) ? getTotalRepaidForLoan(r, transactions) : r.amount },
+          { label: "Balance (₹)", money: true, value: (r) => isOriginalLoan(r) ? getLoanBalance(r, transactions) : 0 },
           { label: "Return Due", value: (r) => (r.loanReturnDate ? formatDateDMY(r.loanReturnDate) : "—") },
-          { label: "Returned On", value: (r) => (r.loanReturnedDate ? formatDateDMY(r.loanReturnedDate) : "—") },
           { label: "Remarks", value: (r) => r.remarks || "—" },
         ],
       });

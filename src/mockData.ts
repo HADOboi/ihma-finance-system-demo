@@ -1918,9 +1918,9 @@ export const PRELOADED_TRANSACTIONS: Transaction[] = [
     chapterIdInput: "KL-EK-CO01",
     chapterNameInput: "Cochin Chapter",
     paidToCategory: "chapter",
-    paidTo: "Cochin Chapter",
-    paidToId: "KL-EK-CO01",
-    paidToName: "Cochin Chapter",
+    paidTo: "Thalassery Local Chapter",
+    paidToId: "KL-KN-TH01",
+    paidToName: "Thalassery Local Chapter",
     particulars: "Conference Auditorium booking advance loan",
     paymentMode: "Bank",
     amountReturned: 100000,
@@ -1947,9 +1947,9 @@ export const PRELOADED_TRANSACTIONS: Transaction[] = [
     chapterIdInput: "KL-KZ-CC01",
     chapterNameInput: "Calicut City",
     paidToCategory: "chapter",
-    paidTo: "Calicut City",
-    paidToId: "KL-KZ-CC01",
-    paidToName: "Calicut City",
+    paidTo: "Cochin Chapter",
+    paidToId: "KL-EK-CO01",
+    paidToName: "Cochin Chapter",
     particulars: "Medicine stock procurement advance",
     paymentMode: "Bank",
     amountReturned: 40000,
@@ -1976,9 +1976,9 @@ export const PRELOADED_TRANSACTIONS: Transaction[] = [
     chapterIdInput: "TN-CN-CC01",
     chapterNameInput: "Chennai Central",
     paidToCategory: "chapter",
-    paidTo: "Chennai Central",
-    paidToId: "TN-CN-CC01",
-    paidToName: "Chennai Central",
+    paidTo: "Cochin Chapter",
+    paidToId: "KL-EK-CO01",
+    paidToName: "Cochin Chapter",
     particulars: "Journal printing advance",
     paymentMode: "Bank",
     amountReturned: 50000,
@@ -2005,9 +2005,9 @@ export const PRELOADED_TRANSACTIONS: Transaction[] = [
     chapterIdInput: "KL-EK-AL02",
     chapterNameInput: "Aluva Chapter",
     paidToCategory: "chapter",
-    paidTo: "Aluva Chapter",
-    paidToId: "KL-EK-AL02",
-    paidToName: "Aluva Chapter",
+    paidTo: "Cochin Chapter",
+    paidToId: "KL-EK-CO01",
+    paidToName: "Cochin Chapter",
     particulars: "Chapter office building repair advance",
     paymentMode: "Cash",
     amountReturned: 20000,
@@ -2050,11 +2050,11 @@ export const PRELOADED_TRANSACTIONS: Transaction[] = [
   })),
   {
     id: "tx_loan_2026_27_cochin", slNo: 110, date: "2026-10-05", type: HeadType.Loan, headId: "loan", headName: "Loan", amount: 100000,
-    voucherNumber: "LN-26-101", chapterId: "cochin", chapterIdInput: "KL-EK-CO01", chapterNameInput: "Cochin Chapter", paidToCategory: "chapter", paidTo: "Cochin Chapter", paidToId: "KL-EK-CO01", paidToName: "Cochin Chapter", particulars: "CME equipment advance", paymentMode: "Bank", amountReturned: 40000, loanBalance: 60000, loanReturnDate: "2027-03-31", loanReturnedDate: "2027-01-25", repaymentPaymentMode: "Bank", repaymentDate: "2027-01-25", remarks: "First repayment received", createdBy: "cochin_treasurer", createdAt: "2026-10-05T10:00:00Z"
+    voucherNumber: "LN-26-101", chapterId: "cochin", chapterIdInput: "KL-EK-CO01", chapterNameInput: "Cochin Chapter", paidToCategory: "chapter", paidTo: "Aluva Chapter", paidToId: "KL-EK-AL02", paidToName: "Aluva Chapter", particulars: "CME equipment advance", paymentMode: "Bank", amountReturned: 40000, loanBalance: 60000, loanReturnDate: "2027-03-31", loanReturnedDate: "2027-01-25", repaymentPaymentMode: "Bank", repaymentDate: "2027-01-25", remarks: "First repayment received", createdBy: "cochin_treasurer", createdAt: "2026-10-05T10:00:00Z"
   },
   {
     id: "tx_loan_2026_27_aluva", slNo: 111, date: "2026-12-08", type: HeadType.Loan, headId: "loan", headName: "Loan", amount: 75000,
-    voucherNumber: "LN-26-102", chapterId: "aluva", chapterIdInput: "KL-EK-AL02", chapterNameInput: "Aluva Chapter", paidToCategory: "chapter", paidTo: "Aluva Chapter", paidToId: "KL-EK-AL02", paidToName: "Aluva Chapter", particulars: "Chapter office repairs", paymentMode: "Cash", amountReturned: 25000, loanBalance: 50000, loanReturnDate: "2027-04-30", loanReturnedDate: "2027-03-10", repaymentPaymentMode: "Cash", repaymentDate: "2027-03-10", remarks: "Partial repayment received", createdBy: "aluva_treasurer", createdAt: "2026-12-08T10:00:00Z"
+    voucherNumber: "LN-26-102", chapterId: "aluva", chapterIdInput: "KL-EK-AL02", chapterNameInput: "Aluva Chapter", paidToCategory: "chapter", paidTo: "Cochin Chapter", paidToId: "KL-EK-CO01", paidToName: "Cochin Chapter", particulars: "Chapter office repairs", paymentMode: "Cash", amountReturned: 25000, loanBalance: 50000, loanReturnDate: "2027-04-30", loanReturnedDate: "2027-03-10", repaymentPaymentMode: "Cash", repaymentDate: "2027-03-10", remarks: "Partial repayment received", createdBy: "aluva_treasurer", createdAt: "2026-12-08T10:00:00Z"
   },
 ];
 
