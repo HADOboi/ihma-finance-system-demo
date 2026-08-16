@@ -658,22 +658,45 @@ export default function Dashboard({
   // Build the allowed displayed IDs and names from the currently scoped chapters
   // so every report observes the same national/state/district/local boundary.
   const allowedChapterDirectoryIds = useMemo(() => {
+    const allowedChapterNodes = CHAPTERS.filter(
+      (chapter) => selectedChapters.includes(chapter.id) || selectedFinancialUnitIds.includes(chapter.id)
+    );
     const allowedNames = new Set(
-      CHAPTERS.filter((chapter) => selectedChapters.includes(chapter.id)).map((chapter) => chapter.name)
+      allowedChapterNodes.map((chapter) =>
+        chapter.name.toLowerCase().replace(/\b(local|chapter)\b/gi, "").trim()
+      )
     );
-    return new Set(
-      chapterDirectory
-        .filter((chapter) => allowedNames.has(chapter.chapterName))
-        .map((chapter) => chapter.id)
-    );
-  }, [chapterDirectory, selectedChapters]);
+    const allowedNodeIds = new Set(allowedChapterNodes.map((chapter) => chapter.id));
+
+    const result = new Set<string>();
+    chapterDirectory.forEach((chapter) => {
+      const cleanDirName = chapter.chapterName.toLowerCase().replace(/\b(local|chapter)\b/gi, "").trim();
+      if (
+        allowedNodeIds.has(chapter.id) ||
+        allowedNames.has(cleanDirName) ||
+        selectedFinancialUnitIds.includes(chapter.id)
+      ) {
+        result.add(chapter.id);
+        result.add(chapter.chapterName);
+      }
+    });
+
+    selectedFinancialUnitIds.forEach((id) => result.add(id));
+    return result;
+  }, [chapterDirectory, selectedChapters, selectedFinancialUnitIds]);
 
   const isChapterInScope = (chapterId?: string, chapterName?: string) =>
     isEntityInScope(chapterId, selectedFinancialUnitIds) ||
     isEntityInScope(chapterName, selectedFinancialUnitIds) ||
     allowedChapterDirectoryIds.has(chapterId || "") ||
+    allowedChapterDirectoryIds.has(chapterName || "") ||
     CHAPTERS.some(
-      (chapter) => selectedChapters.includes(chapter.id) && (chapter.name === chapterName || chapter.id === chapterId)
+      (chapter) =>
+        (selectedChapters.includes(chapter.id) || selectedFinancialUnitIds.includes(chapter.id)) &&
+        (chapter.name === chapterName ||
+          chapter.id === chapterId ||
+          chapter.name.toLowerCase().replace(/\b(local|chapter)\b/gi, "").trim() ===
+            (chapterName || "").toLowerCase().replace(/\b(local|chapter)\b/gi, "").trim())
     );
 
   const filteredMembers = useMemo(() => {

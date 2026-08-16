@@ -1,6 +1,11 @@
 import { OrgLevel } from "../types";
 import { CHAPTERS, DISTRICTS, STATES } from "../mockData";
-import { getChapterCode, NATIONAL_FINANCIAL_UNIT_ID } from "./financialUnits";
+import {
+  getChapterCode,
+  NATIONAL_FINANCIAL_UNIT_ID,
+  KNOWN_CHAPTER_CODES,
+  KNOWN_CODE_TO_UNITS,
+} from "./financialUnits";
 
 export function slugify(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
@@ -164,10 +169,15 @@ export function districtMatches(userDistrictId: string, chapterDistrictId: strin
   const b = normalizeUnitId(chapterDistrictId);
   if (!a || !b) return false;
   if (a === b) return true;
-  if (DISTRICT_PREFIXES[a] && DISTRICT_PREFIXES[a] === DISTRICT_PREFIXES[b]) return true;
-  if (DISTRICT_PREFIXES[a] && DISTRICT_PREFIXES[a] === b) return true;
-  if (DISTRICT_PREFIXES[b] && DISTRICT_PREFIXES[b] === a) return true;
-  return a.includes(b) || b.includes(a);
+
+  const distA = DISTRICT_PREFIXES[a] || (DISTRICTS.some((d) => d.id === a) ? a : null);
+  const distB = DISTRICT_PREFIXES[b] || (DISTRICTS.some((d) => d.id === b) ? b : null);
+
+  if (distA && distB) {
+    return distA === distB;
+  }
+
+  return false;
 }
 
 export function isEntityInScope(
@@ -176,19 +186,43 @@ export function isEntityInScope(
 ): boolean {
   if (!entityUnitId) return false;
   if (selectedUnitIds.length === 0) return false;
+
   if (selectedUnitIds.includes(entityUnitId)) return true;
+
+  // Resolve chapter code e.g. "KL-EK-CO01" -> "cochin"
+  const resolvedUnitId = KNOWN_CODE_TO_UNITS[entityUnitId.toUpperCase()] || entityUnitId;
+  if (selectedUnitIds.includes(resolvedUnitId)) return true;
+
+  // Resolve selectedUnitIds e.g. "cochin" -> "KL-EK-CO01"
+  const resolvedSelectedUnitIds = selectedUnitIds.map((id) => KNOWN_CHAPTER_CODES[id] || id);
+  if (resolvedSelectedUnitIds.includes(entityUnitId) || resolvedSelectedUnitIds.includes(resolvedUnitId)) return true;
+
   const slug = slugify(entityUnitId);
   for (const sel of selectedUnitIds) {
     if (!sel) continue;
     if (slug === slugify(sel)) return true;
+    if (slugify(resolvedUnitId) === slugify(sel)) return true;
     if (districtMatches(sel, entityUnitId)) return true;
+    if (districtMatches(sel, resolvedUnitId)) return true;
   }
   return false;
 }
 
 export function parseChapterCodeToOrg(chapterCode: string): OrgContext | null {
-  const code = chapterCode.trim().toUpperCase();
+  if (!chapterCode) return null;
+
+  // Clean role/member suffixes e.g. "-TREASURER", "-TREAS", "-PRESIDENT", "-SECRETARY", etc.
+  const code = chapterCode
+    .trim()
+    .toUpperCase()
+    .replace(/-(TREASURER|TREAS|PRESIDENT|PRES|SECRETARY|SEC|GENSEC|VP|MEMBER|AUDITOR|MEM\d+|\d+)$/i, "")
+    .trim();
+
   if (!code) return null;
+
+  if (KNOWN_CODE_TO_UNITS[code]) {
+    return { level: OrgLevel.Local, nodeId: KNOWN_CODE_TO_UNITS[code] };
+  }
 
   if (code === "IN" || code.startsWith("IN-") || code.includes("ND-HQ") || (code.startsWith("DL") && code.includes("HQ"))) {
     return { level: OrgLevel.National, nodeId: NATIONAL_FINANCIAL_UNIT_ID };

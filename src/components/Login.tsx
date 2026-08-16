@@ -61,8 +61,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
         // Fallback check if credentials match initial demo set when server is empty
         const lowerUser = trimmedUsername.toLowerCase();
+        const cleanUser = lowerUser.split("@")[0];
         const demoUser = USERS.find(
-          (u) => u.username === lowerUser && u.password === password
+          (u) => (u.username === lowerUser || u.username === cleanUser) && u.password === password
         );
 
         if (demoUser) {
@@ -70,23 +71,39 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           return;
         }
 
+        // Dynamic demo user construction fallback
+        if (password === "demo" || password === "pass" || password === "admin") {
+          const dynamicRole = determineUserRoleFromMember(null, cleanUser);
+          const dynamicUser: User = {
+            username: cleanUser,
+            name: cleanUser.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+            role: dynamicRole.role,
+            level: dynamicRole.level,
+            nodeId: dynamicRole.nodeId || "cochin",
+            designation: dynamicRole.designation,
+          };
+          onLoginSuccess(dynamicUser);
+          return;
+        }
+
         setError(result.error || "Invalid username or password. Please check your credentials.");
       } else {
         // Local Demo fallback when .env keys are not yet provided
         const lowerUser = trimmedUsername.toLowerCase();
+        const cleanUser = lowerUser.split("@")[0];
         const foundUser = USERS.find(
-          (u) => u.username === lowerUser && u.password === password
+          (u) => (u.username === lowerUser || u.username === cleanUser) && u.password === password
         );
 
         if (foundUser) {
           onLoginSuccess(foundUser);
         } else {
-          // Dynamic user construction if password matches demo pattern
-          if (password === "pass" || password === "admin" || password === "123456") {
-            const dynamicRole = determineUserRoleFromMember(null, lowerUser);
+          // Dynamic user construction if username is recognized in demo pattern
+          const dynamicRole = determineUserRoleFromMember(null, cleanUser);
+          if (password === "demo" || password === "pass" || password === "admin") {
             const dynamicUser: User = {
-              username: lowerUser,
-              name: lowerUser.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+              username: cleanUser,
+              name: cleanUser.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
               role: dynamicRole.role,
               level: dynamicRole.level,
               nodeId: dynamicRole.nodeId || "cochin",
